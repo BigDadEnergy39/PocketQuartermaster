@@ -21,22 +21,8 @@ export function useContainers(unitId: string | undefined) {
 
   async function fetchContainers() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('containers')
-      .select(`
-        id, name, type, purpose, notes,
-        item_slots(count)
-      `)
-      .eq('unit_id', unitId)
-      .eq('is_archived', false)
-      .order('name');
-
-    if (!error && data) {
-      setContainers(data.map((c: any) => ({
-        ...c,
-        item_count: c.item_slots?.[0]?.count ?? 0,
-      })));
-    }
+    const { data, error } = await supabase.rpc('get_containers', { p_unit_id: unitId });
+    if (!error && data) setContainers(data);
     setLoading(false);
   }
 
