@@ -1,6 +1,7 @@
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { router, useFocusEffect, useNavigation } from 'expo-router';
+import { useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnit } from '../../src/context/UnitContext';
 import { useContainers } from '../../src/hooks/useContainers';
@@ -25,8 +26,19 @@ export default function Inventory() {
   const { currentUnit } = useUnit();
   const { containers, loading, refetch } = useContainers(currentUnit?.id);
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
   useFocusEffect(useCallback(() => { refetch(); }, [currentUnit?.id]));
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={() => router.push('/audit')} style={{ marginRight: 16 }}>
+          <Text style={{ color: currentUnit?.accent_color ?? '#2d5a27', fontSize: 15, fontWeight: '600' }}>Audit</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [currentUnit]);
 
   if (!currentUnit) {
     return (
