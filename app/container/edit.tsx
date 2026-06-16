@@ -26,6 +26,7 @@ export default function EditContainer() {
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -61,6 +62,26 @@ export default function EditContainer() {
     } else {
       router.back();
     }
+  }
+
+  function confirmDuplicate() {
+    Alert.prompt(
+      'Duplicate Container',
+      'Name for the new container:',
+      async (newName) => {
+        if (!newName?.trim()) return;
+        setDuplicating(true);
+        const { data: newId, error } = await supabase.rpc('duplicate_container', {
+          p_container_id: id,
+          p_new_name: newName.trim(),
+        });
+        setDuplicating(false);
+        if (error) { Alert.alert('Error', error.message); return; }
+        router.replace(`/container/${newId}`);
+      },
+      'plain-text',
+      `${name} (copy)`,
+    );
   }
 
   function confirmDelete() {
@@ -147,6 +168,14 @@ export default function EditContainer() {
       </TouchableOpacity>
 
       <TouchableOpacity
+        style={[styles.duplicateBtn, duplicating && styles.disabled]}
+        onPress={confirmDuplicate}
+        disabled={duplicating}
+      >
+        <Text style={styles.duplicateBtnText}>{duplicating ? 'Duplicating…' : '⧉ Duplicate Container'}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
         style={[styles.deleteBtn, deleting && styles.disabled]}
         onPress={confirmDelete}
         disabled={deleting}
@@ -194,13 +223,14 @@ const styles = StyleSheet.create({
   saveBtn: { padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 32 },
   disabled: { opacity: 0.6 },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  duplicateBtn: {
+    padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 12,
+    borderWidth: 1.5, borderColor: '#1a5276',
+  },
+  duplicateBtnText: { color: '#1a5276', fontSize: 15, fontWeight: '600' },
   deleteBtn: {
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 12,
-    borderWidth: 1.5,
-    borderColor: '#c0392b',
+    padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 12,
+    borderWidth: 1.5, borderColor: '#c0392b',
   },
   deleteBtnText: { color: '#c0392b', fontSize: 15, fontWeight: '600' },
 });

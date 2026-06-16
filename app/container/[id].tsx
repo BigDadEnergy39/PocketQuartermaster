@@ -9,7 +9,7 @@ function statusColor(current: number | null, expected: number, min: number | nul
   if (current === null) return '#aaa';
   if (current === 0) return '#c0392b';
   const threshold = min ?? Math.ceil(expected * 0.25);
-  if (current <= threshold) return '#e67e22';
+  if (current < expected && current <= threshold) return '#e67e22';
   return '#2d5a27';
 }
 
@@ -58,6 +58,7 @@ export default function ContainerDetail() {
           const color = statusColor(item.current_quantity, item.expected_quantity, item.min_quantity);
           const label = statusLabel(item.current_quantity, item.expected_quantity, item.unit_of_measure);
           const isLow = item.current_quantity !== null &&
+            item.current_quantity < item.expected_quantity &&
             item.current_quantity <= (item.min_quantity ?? Math.ceil(item.expected_quantity * 0.25));
 
           return (

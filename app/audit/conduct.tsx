@@ -114,7 +114,7 @@ export default function AuditConduct() {
     }
   }
 
-  const isLow = (qty: number) => qty <= (current.min_quantity ?? Math.ceil(current.expected_quantity * 0.25));
+  const isLow = (qty: number) => qty < current.expected_quantity && qty <= (current.min_quantity ?? Math.ceil(current.expected_quantity * 0.25));
   const parsedQty = parseInt(currentInput, 10);
   const qtyColor = isNaN(parsedQty) ? '#aaa' : parsedQty === 0 ? '#c0392b' : isLow(parsedQty) ? '#e67e22' : '#2d5a27';
 

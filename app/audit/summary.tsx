@@ -57,7 +57,8 @@ export default function AuditSummary() {
 
   function isLow(line: LineItem) {
     if (line.actual_quantity == null) return false;
-    return line.actual_quantity <= (line.min_quantity ?? Math.ceil(line.expected_quantity * 0.25));
+    return line.actual_quantity < line.expected_quantity &&
+      line.actual_quantity <= (line.min_quantity ?? Math.ceil(line.expected_quantity * 0.25));
   }
 
   const outOfStock = lines.filter(l => l.actual_quantity === 0);
