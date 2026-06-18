@@ -1,8 +1,35 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, Alert, ScrollView } from 'react-native';
+import {
+  View, Text, TouchableOpacity, StyleSheet, TextInput, Alert,
+  ScrollView, Modal, Platform,
+} from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, router, useNavigation, useFocusEffect } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
+
+interface ExpirationLot {
+  id: string;
+  quantity: number;
+  expiration_date: string;
+  days_until: number;
+}
+
+function lotColor(days: number): string {
+  if (days < 0) return '#c0392b';
+  if (days <= 7) return '#c0392b';
+  if (days <= 30) return '#e67e22';
+  return '#2d5a27';
+}
+
+function lotLabel(days: number): string {
+  if (days < 0) return `Expired ${Math.abs(days)}d ago`;
+  if (days === 0) return 'Expires today';
+  if (days === 1) return 'Expires tomorrow';
+  if (days <= 30) return `Expires in ${days}d`;
+  const weeks = Math.round(days / 7);
+  return `Expires in ~${weeks}w`;
+}
 
 export default function ItemDetail() {
   const { slot_id } = useLocalSearchParams<{ slot_id: string }>();
@@ -16,11 +43,23 @@ export default function ItemDetail() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const [lots, setLots] = useState<ExpirationLot[]>([]);
+  const [lotsLoaded, setLotsLoaded] = useState(false);
+
+  // Add lot modal state
+  const [showAddLot, setShowAddLot] = useState(false);
+  const [lotQty, setLotQty] = useState('1');
+  const [lotDate, setLotDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(Platform.OS === 'ios');
+  const [addingLot, setAddingLot] = useState(false);
+
+  const accent = currentUnit?.accent_color ?? '#2d5a27';
+
   async function loadItem() {
     if (!slot_id) return;
     const { data } = await supabase
       .from('item_slots')
-      .select(`id, expected_quantity, items(id, name, category, unit_of_measure, min_quantity), containers(id, name)`)
+      .select(`id, expected_quantity, items(id, name, category, unit_of_measure, min_quantity, is_perishable), containers(id, name)`)
       .eq('id', slot_id)
       .single();
 
@@ -35,8 +74,15 @@ export default function ItemDetail() {
     setLoaded(true);
   }
 
-  useEffect(() => { loadItem(); }, [slot_id]);
-  useFocusEffect(useCallback(() => { loadItem(); }, [slot_id]));
+  async function loadLots() {
+    if (!slot_id) return;
+    const { data } = await supabase.rpc('get_expiration_lots', { p_slot_id: slot_id });
+    if (data) setLots(data);
+    setLotsLoaded(true);
+  }
+
+  useEffect(() => { loadItem(); loadLots(); }, [slot_id]);
+  useFocusEffect(useCallback(() => { loadItem(); loadLots(); }, [slot_id]));
 
   useEffect(() => {
     if (!item) return;
@@ -44,7 +90,7 @@ export default function ItemDetail() {
       title: item.items?.name ?? 'Item Detail',
       headerRight: () => (
         <TouchableOpacity onPress={() => router.push(`/item/edit?slot_id=${slot_id}`)} style={{ marginRight: 16 }}>
-          <Text style={{ color: currentUnit?.accent_color ?? '#2d5a27', fontSize: 15, fontWeight: '600' }}>Edit</Text>
+          <Text style={{ color: accent, fontSize: 15, fontWeight: '600' }}>Edit</Text>
         </TouchableOpacity>
       ),
     });
@@ -66,7 +112,21 @@ export default function ItemDetail() {
       Alert.alert('Error', error.message);
     } else {
       setSaved(true);
-      setTimeout(() => router.back(), 800);
+      // If perishable and no lots recorded yet, offer to add one
+      if (item?.items?.is_perishable && lots.length === 0) {
+        setTimeout(() => {
+          Alert.alert(
+            'Add Expiration Date?',
+            'This item tracks expiration dates. Want to log a batch now?',
+            [
+              { text: 'Skip', style: 'cancel', onPress: () => router.back() },
+              { text: 'Add Date', onPress: () => { setSaved(false); setShowAddLot(true); } },
+            ]
+          );
+        }, 300);
+      } else {
+        setTimeout(() => router.back(), 800);
+      }
     }
   }
 
@@ -85,6 +145,43 @@ export default function ItemDetail() {
     Alert.alert('Added', `${item.items.name} added to the shopping list.`);
   }
 
+  async function submitLot() {
+    const qty = parseInt(lotQty, 10);
+    if (isNaN(qty) || qty < 1) { Alert.alert('Invalid quantity', 'Enter a positive number.'); return; }
+    setAddingLot(true);
+    const dateStr = lotDate.toISOString().split('T')[0];
+    const { error } = await supabase.rpc('add_expiration_lot', {
+      p_slot_id: slot_id,
+      p_expiration_date: dateStr,
+      p_quantity: qty,
+    });
+    setAddingLot(false);
+    if (error) { Alert.alert('Error', error.message); return; }
+    setShowAddLot(false);
+    setLotQty('1');
+    setLotDate(new Date());
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    await loadLots();
+    if (saved) setTimeout(() => router.back(), 400);
+  }
+
+  function confirmClearLot(lot: ExpirationLot) {
+    const dateStr = new Date(lot.expiration_date).toLocaleDateString();
+    Alert.alert(
+      'Clear Lot',
+      `Mark the "${dateStr}" batch (qty ${lot.quantity}) as used?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: () => clearLot(lot.id) },
+      ]
+    );
+  }
+
+  async function clearLot(lotId: string) {
+    await supabase.rpc('clear_expiration_lot', { p_lot_id: lotId });
+    await loadLots();
+  }
+
   if (!loaded) return null;
   if (!item) return (
     <View style={styles.center}><Text style={styles.err}>Item not found.</Text></View>
@@ -93,79 +190,182 @@ export default function ItemDetail() {
   const current = item.current_quantity;
   const expected = item.expected_quantity;
   const unit = item.items.unit_of_measure;
+  const isPerishable = item.items.is_perishable;
   const isLow = current !== null && current < expected && current <= (item.items.min_quantity ?? Math.ceil(expected * 0.25));
   const needsRestock = isLow || current === 0;
 
+  const expiredLots = lots.filter(l => l.days_until < 0);
+  const urgentLots = lots.filter(l => l.days_until >= 0 && l.days_until <= 7);
+  const hasUrgent = expiredLots.length > 0 || urgentLots.length > 0;
+
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      {item.containers && <Text style={styles.containerName}>In: {item.containers.name}</Text>}
-      {item.items.category && <Text style={styles.category}>{item.items.category}</Text>}
+    <>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {item.containers && <Text style={styles.containerName}>In: {item.containers.name}</Text>}
+        {item.items.category && <Text style={styles.category}>{item.items.category}</Text>}
 
-      <View style={styles.qtyCard}>
-        <View style={styles.qtyBlock}>
-          <Text style={styles.qtyNum}>{current ?? '—'}</Text>
-          <Text style={styles.qtyLabel}>Current</Text>
+        <View style={styles.qtyCard}>
+          <View style={styles.qtyBlock}>
+            <Text style={styles.qtyNum}>{current ?? '—'}</Text>
+            <Text style={styles.qtyLabel}>Current</Text>
+          </View>
+          <Text style={styles.qtyDiv}>/</Text>
+          <View style={styles.qtyBlock}>
+            <Text style={styles.qtyNum}>{expected}</Text>
+            <Text style={styles.qtyLabel}>Expected</Text>
+          </View>
+          <Text style={styles.qtyUnit}>{unit}</Text>
         </View>
-        <Text style={styles.qtyDiv}>/</Text>
-        <View style={styles.qtyBlock}>
-          <Text style={styles.qtyNum}>{expected}</Text>
-          <Text style={styles.qtyLabel}>Expected</Text>
+
+        {item.last_notes && (
+          <View style={styles.lastNotesBox}>
+            <Text style={styles.lastNotesLabel}>Last note:</Text>
+            <Text style={styles.lastNotesText}>{item.last_notes}</Text>
+          </View>
+        )}
+
+        {needsRestock && (
+          <TouchableOpacity style={styles.shoppingBtn} onPress={addToShopping}>
+            <Text style={styles.shoppingBtnText}>🛒 Add to Shopping List</Text>
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.label}>Update Count</Text>
+        <View style={styles.row}>
+          <TextInput
+            style={styles.qtyInput}
+            value={newQty}
+            onChangeText={setNewQty}
+            placeholder={`Enter ${unit} count`}
+            placeholderTextColor="#aaa"
+            keyboardType="numeric"
+            returnKeyType="done"
+            onSubmitEditing={updateQty}
+            autoFocus
+          />
+          <TouchableOpacity
+            style={[styles.updateBtn, { backgroundColor: saved ? '#2d5a27' : accent }, saving && styles.disabled]}
+            onPress={updateQty}
+            disabled={saving || saved}
+          >
+            <Text style={styles.updateBtnText}>{saving ? '…' : saved ? '✓' : 'Record'}</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.qtyUnit}>{unit}</Text>
-      </View>
 
-      {item.last_notes && (
-        <View style={styles.lastNotesBox}>
-          <Text style={styles.lastNotesLabel}>Last note:</Text>
-          <Text style={styles.lastNotesText}>{item.last_notes}</Text>
-        </View>
-      )}
-
-      {needsRestock && (
-        <TouchableOpacity style={styles.shoppingBtn} onPress={addToShopping}>
-          <Text style={styles.shoppingBtnText}>🛒 Add to Shopping List</Text>
-        </TouchableOpacity>
-      )}
-
-      <Text style={styles.label}>Update Count</Text>
-      <View style={styles.row}>
+        <Text style={styles.label}>Notes (optional)</Text>
         <TextInput
-          style={styles.qtyInput}
-          value={newQty}
-          onChangeText={setNewQty}
-          placeholder={`Enter ${unit} count`}
+          style={styles.notesInput}
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="e.g. Lid is cracked, needs replacement"
           placeholderTextColor="#aaa"
-          keyboardType="numeric"
-          returnKeyType="done"
-          onSubmitEditing={updateQty}
-          autoFocus
+          multiline
+          numberOfLines={2}
         />
-        <TouchableOpacity
-          style={[styles.updateBtn, { backgroundColor: saved ? '#2d5a27' : currentUnit?.accent_color ?? '#2d5a27' }, saving && styles.disabled]}
-          onPress={updateQty}
-          disabled={saving || saved}
-        >
-          <Text style={styles.updateBtnText}>{saving ? '…' : saved ? '✓' : 'Record'}</Text>
-        </TouchableOpacity>
-      </View>
 
-      <Text style={styles.label}>Notes (optional)</Text>
-      <TextInput
-        style={[styles.notesInput]}
-        value={notes}
-        onChangeText={setNotes}
-        placeholder="e.g. Lid is cracked, needs replacement"
-        placeholderTextColor="#aaa"
-        multiline
-        numberOfLines={2}
-      />
+        {item.last_updated && (
+          <Text style={styles.lastUpdated}>
+            Last counted: {new Date(item.last_updated).toLocaleDateString()}
+          </Text>
+        )}
 
-      {item.last_updated && (
-        <Text style={styles.lastUpdated}>
-          Last counted: {new Date(item.last_updated).toLocaleDateString()}
-        </Text>
-      )}
-    </ScrollView>
+        {/* Expiration section — only shown for perishable items */}
+        {isPerishable && (
+          <>
+            <View style={styles.expirationHeader}>
+              <Text style={styles.label}>Expiration Dates</Text>
+              <TouchableOpacity onPress={() => setShowAddLot(true)}>
+                <Text style={[styles.addLotLink, { color: accent }]}>+ Add Lot</Text>
+              </TouchableOpacity>
+            </View>
+
+            {hasUrgent && (
+              <View style={styles.urgentBanner}>
+                <Text style={styles.urgentText}>
+                  ⚠️{expiredLots.length > 0 ? ` ${expiredLots.length} expired` : ''}{expiredLots.length > 0 && urgentLots.length > 0 ? ',' : ''}{urgentLots.length > 0 ? ` ${urgentLots.length} expiring this week` : ''}
+                </Text>
+              </View>
+            )}
+
+            {lotsLoaded && lots.length === 0 && (
+              <Text style={styles.noLots}>No expiration lots recorded.</Text>
+            )}
+
+            {lots.map(lot => {
+              const color = lotColor(lot.days_until);
+              const dateStr = new Date(lot.expiration_date).toLocaleDateString();
+              return (
+                <View key={lot.id} style={styles.lotRow}>
+                  <View style={[styles.lotDot, { backgroundColor: color }]} />
+                  <View style={styles.lotBody}>
+                    <Text style={styles.lotDate}>{dateStr}</Text>
+                    <Text style={[styles.lotUrgency, { color }]}>{lotLabel(lot.days_until)}</Text>
+                  </View>
+                  <Text style={styles.lotQty}>Qty: {lot.quantity}</Text>
+                  <TouchableOpacity onPress={() => confirmClearLot(lot)} style={styles.clearBtn}>
+                    <Text style={styles.clearBtnText}>Clear</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </>
+        )}
+      </ScrollView>
+
+      {/* Add Lot Modal */}
+      <Modal visible={showAddLot} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Add Expiration Lot</Text>
+
+            <Text style={styles.modalLabel}>Quantity</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={lotQty}
+              onChangeText={setLotQty}
+              keyboardType="numeric"
+              placeholder="e.g. 2"
+              placeholderTextColor="#aaa"
+            />
+
+            <Text style={styles.modalLabel}>Expiration Date</Text>
+            {Platform.OS === 'android' && (
+              <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
+                <Text style={styles.dateBtnText}>{lotDate.toLocaleDateString()}</Text>
+              </TouchableOpacity>
+            )}
+            {(showDatePicker || Platform.OS === 'ios') && (
+              <DateTimePicker
+                value={lotDate}
+                mode="date"
+                minimumDate={new Date()}
+                onChange={(_, date) => {
+                  if (Platform.OS === 'android') setShowDatePicker(false);
+                  if (date) setLotDate(date);
+                }}
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              />
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => { setShowAddLot(false); if (saved) setTimeout(() => router.back(), 200); }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSave, { backgroundColor: accent }, addingLot && styles.disabled]}
+                onPress={submitLot}
+                disabled={addingLot}
+              >
+                <Text style={styles.modalSaveText}>{addingLot ? 'Saving…' : 'Save Lot'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -210,4 +410,33 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top', minHeight: 70,
   },
   lastUpdated: { fontSize: 12, color: '#bbb', marginTop: 16, textAlign: 'center' },
+  expirationHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 28 },
+  addLotLink: { fontSize: 14, fontWeight: '700' },
+  urgentBanner: { backgroundColor: '#fdf0ee', borderRadius: 8, padding: 10, marginBottom: 10 },
+  urgentText: { color: '#c0392b', fontSize: 13, fontWeight: '700' },
+  noLots: { fontSize: 13, color: '#aaa', marginBottom: 8 },
+  lotRow: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
+    borderRadius: 10, padding: 12, marginBottom: 8, gap: 10,
+    borderWidth: 1, borderColor: '#e0d8cc',
+  },
+  lotDot: { width: 10, height: 10, borderRadius: 5 },
+  lotBody: { flex: 1 },
+  lotDate: { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
+  lotUrgency: { fontSize: 12, marginTop: 2 },
+  lotQty: { fontSize: 13, color: '#888' },
+  clearBtn: { backgroundColor: '#f5f0e8', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
+  clearBtnText: { fontSize: 12, color: '#888', fontWeight: '600' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', marginBottom: 20 },
+  modalLabel: { fontSize: 13, fontWeight: '700', color: '#555', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
+  modalInput: { backgroundColor: '#f5f0e8', borderRadius: 10, padding: 14, fontSize: 20, color: '#1a1a1a' },
+  dateBtn: { backgroundColor: '#f5f0e8', borderRadius: 10, padding: 14 },
+  dateBtnText: { fontSize: 16, color: '#1a1a1a' },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  modalCancel: { flex: 1, padding: 14, borderRadius: 10, alignItems: 'center', backgroundColor: '#f5f0e8' },
+  modalCancelText: { color: '#666', fontWeight: '600', fontSize: 15 },
+  modalSave: { flex: 1, padding: 14, borderRadius: 10, alignItems: 'center' },
+  modalSaveText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

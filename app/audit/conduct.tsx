@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, TextInput,
-  Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
+  View, Text, SectionList, TouchableOpacity, StyleSheet,
+  TextInput, Alert, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
@@ -20,6 +21,14 @@ interface AuditItem {
   min_quantity: number | null;
 }
 
+type CheckState = 'unchecked' | 'checked' | 'adjusted';
+
+interface ItemCheck extends AuditItem {
+  state: CheckState;
+  quantity: number;
+  editing: boolean;
+}
+
 const TYPE_EMOJI: Record<string, string> = {
   tote: '📦', shelf: '🗄️', stuff_sack: '🎒', compartment: '🗃️', cooler: '🧊', bag: '👜', other: '📫',
 };
@@ -27,15 +36,12 @@ const TYPE_EMOJI: Record<string, string> = {
 export default function AuditConduct() {
   const { audit_id } = useLocalSearchParams<{ audit_id: string }>();
   const { currentUnit } = useUnit();
-  const inputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
+  const editRef = useRef<TextInput>(null);
 
-  const [items, setItems] = useState<AuditItem[]>([]);
+  const [checks, setChecks] = useState<ItemCheck[]>([]);
   const [loading, setLoading] = useState(true);
-  const [step, setStep] = useState(0);
-  const [counts, setCounts] = useState<Record<string, number>>({});  // slot_id → count
-  const [currentInput, setCurrentInput] = useState('');
   const [saving, setSaving] = useState(false);
-  const [newContainer, setNewContainer] = useState(true);
 
   const accent = currentUnit?.accent_color ?? '#2d5a27';
 
@@ -43,154 +49,188 @@ export default function AuditConduct() {
     if (!currentUnit) return;
     supabase.rpc('get_audit_items', { p_unit_id: currentUnit.id }).then(({ data }) => {
       if (data) {
-        setItems(data);
-        // Pre-fill with last known quantities
-        const pre: Record<string, number> = {};
-        data.forEach((i: AuditItem) => {
-          if (i.current_quantity != null) pre[i.slot_id] = i.current_quantity;
-        });
-        setCounts(pre);
+        setChecks(data.map((i: AuditItem) => ({
+          ...i,
+          state: 'unchecked' as CheckState,
+          quantity: i.expected_quantity,
+          editing: false,
+        })));
       }
       setLoading(false);
     });
   }, []);
 
-  useEffect(() => {
-    if (items.length === 0) return;
-    const current = items[step];
-    const prev = step > 0 ? items[step - 1] : null;
-    setNewContainer(!prev || prev.container_id !== current.container_id);
-    // Pre-fill input with existing count for this item
-    setCurrentInput(counts[current.slot_id] != null ? String(counts[current.slot_id]) : '');
-    setTimeout(() => inputRef.current?.focus(), 150);
-  }, [step, items.length]);
+  function tapItem(slot_id: string) {
+    setChecks(prev => prev.map(c => {
+      if (c.slot_id !== slot_id) return { ...c, editing: false };
+      if (c.state === 'unchecked') {
+        return { ...c, state: 'checked', quantity: c.expected_quantity, editing: false };
+      }
+      return { ...c, editing: !c.editing };
+    }));
+    setTimeout(() => editRef.current?.focus(), 100);
+  }
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={accent} /></View>;
-  if (items.length === 0) return <View style={styles.center}><Text style={styles.empty}>No items to audit.</Text></View>;
+  function uncheckItem(slot_id: string) {
+    setChecks(prev => prev.map(c =>
+      c.slot_id === slot_id
+        ? { ...c, state: 'unchecked', quantity: c.expected_quantity, editing: false }
+        : c
+    ));
+  }
 
-  const current = items[step];
-  const total = items.length;
-  const progress = step / total;
+  function commitQty(slot_id: string, text: string) {
+    const qty = parseInt(text, 10);
+    setChecks(prev => prev.map(c => {
+      if (c.slot_id !== slot_id) return c;
+      if (isNaN(qty) || qty < 0) return { ...c, editing: false };
+      const state: CheckState = qty === 0 ? 'unchecked' : qty !== c.expected_quantity ? 'adjusted' : 'checked';
+      return { ...c, state, quantity: qty === 0 ? c.expected_quantity : qty, editing: false };
+    }));
+  }
 
-  async function submitCount(skip = false) {
-    const qty = skip ? (counts[current.slot_id] ?? 0) : parseInt(currentInput, 10);
-    if (!skip && (isNaN(qty) || qty < 0)) {
-      Alert.alert('Invalid count', 'Enter 0 or a positive number, or skip this item.');
-      return;
-    }
+  const checkedCount = checks.filter(c => c.state !== 'unchecked').length;
+  const total = checks.length;
+  const progress = total > 0 ? checkedCount / total : 0;
 
-    setSaving(true);
-    if (!skip) {
-      await supabase.rpc('record_audit_item', {
-        p_audit_id: audit_id,
-        p_slot_id: current.slot_id,
-        p_expected_qty: current.expected_quantity,
-        p_actual_qty: qty,
-      });
-      setCounts(prev => ({ ...prev, [current.slot_id]: qty }));
-    }
-    setSaving(false);
+  // Build sections grouped by container, preserving order from RPC
+  const sections = (() => {
+    const order: string[] = [];
+    const groups: Record<string, ItemCheck[]> = {};
+    checks.forEach(c => {
+      if (!groups[c.container_id]) { groups[c.container_id] = []; order.push(c.container_id); }
+      groups[c.container_id].push(c);
+    });
+    return order.map(cid => ({
+      container_id: cid,
+      container_name: groups[cid][0].container_name,
+      container_type: groups[cid][0].container_type,
+      data: groups[cid],
+    }));
+  })();
 
-    if (step + 1 >= total) {
-      finishAudit();
+  async function finish() {
+    const unchecked = checks.filter(c => c.state === 'unchecked');
+    if (unchecked.length > 0) {
+      Alert.alert(
+        `${unchecked.length} item${unchecked.length !== 1 ? 's' : ''} not counted`,
+        'Uncounted items will be skipped in the summary. Continue?',
+        [
+          { text: 'Keep Counting', style: 'cancel' },
+          { text: 'Finish Anyway', onPress: doFinish },
+        ]
+      );
     } else {
-      setStep(s => s + 1);
+      doFinish();
     }
   }
 
-  async function finishAudit() {
+  async function doFinish() {
+    setSaving(true);
+    for (const c of checks) {
+      if (c.state === 'unchecked') continue;
+      await supabase.rpc('record_audit_item', {
+        p_audit_id: audit_id,
+        p_slot_id: c.slot_id,
+        p_expected_qty: c.expected_quantity,
+        p_actual_qty: c.quantity,
+      });
+    }
     await supabase.rpc('complete_audit', { p_audit_id: audit_id });
+    setSaving(false);
     router.replace(`/audit/summary?audit_id=${audit_id}`);
   }
 
-  function goBack() {
-    if (step === 0) {
-      Alert.alert('Quit Audit', 'Abandon this audit? Counts recorded so far are saved.', [
-        { text: 'Keep Going', style: 'cancel' },
-        { text: 'Quit', style: 'destructive', onPress: () => router.replace('/(tabs)') },
-      ]);
-    } else {
-      setStep(s => s - 1);
-    }
-  }
-
-  const isLow = (qty: number) => qty < current.expected_quantity && qty <= (current.min_quantity ?? Math.ceil(current.expected_quantity * 0.25));
-  const parsedQty = parseInt(currentInput, 10);
-  const qtyColor = isNaN(parsedQty) ? '#aaa' : parsedQty === 0 ? '#c0392b' : isLow(parsedQty) ? '#e67e22' : '#2d5a27';
+  if (loading) return <View style={styles.center}><ActivityIndicator color={accent} /></View>;
+  if (checks.length === 0) return <View style={styles.center}><Text style={styles.empty}>No items to audit.</Text></View>;
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* Progress bar */}
+    <View style={styles.container}>
       <View style={styles.progressBg}>
         <View style={[styles.progressFill, { width: `${progress * 100}%` as any, backgroundColor: accent }]} />
       </View>
-      <Text style={styles.progressLabel}>{step + 1} of {total}</Text>
+      <Text style={styles.progressLabel}>{checkedCount} of {total} counted</Text>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {/* Container header — shown when switching containers */}
-        {newContainer && (
-          <View style={[styles.containerHeader, { borderLeftColor: accent }]}>
-            <Text style={styles.containerHeaderEmoji}>{TYPE_EMOJI[current.container_type] ?? '📦'}</Text>
-            <Text style={styles.containerHeaderName}>{current.container_name}</Text>
-          </View>
-        )}
-
-        {/* Item card */}
-        <View style={styles.itemCard}>
-          {current.category && <Text style={styles.category}>{current.category}</Text>}
-          <Text style={styles.itemName}>{current.item_name}</Text>
-          <Text style={styles.expected}>Expected: {current.expected_quantity} {current.unit_of_measure}</Text>
-
-          {current.current_quantity != null && (
-            <Text style={styles.lastCount}>Last count: {current.current_quantity}</Text>
-          )}
-        </View>
-
-        {/* Count input */}
-        <Text style={styles.countLabel}>How many do you see?</Text>
-        <View style={styles.inputRow}>
-          <TextInput
-            ref={inputRef}
-            style={[styles.countInput, { borderColor: isNaN(parsedQty) ? '#e0d8cc' : qtyColor }]}
-            value={currentInput}
-            onChangeText={setCurrentInput}
-            keyboardType="numeric"
-            placeholder="0"
-            placeholderTextColor="#ccc"
-            returnKeyType="done"
-            onSubmitEditing={() => submitCount()}
-          />
-          <Text style={styles.unitLabel}>{current.unit_of_measure}</Text>
-        </View>
-
-        {!isNaN(parsedQty) && parsedQty !== current.expected_quantity && (
-          <View style={[styles.discrepancy, { backgroundColor: parsedQty === 0 ? '#fdf0ee' : '#fdf6ee' }]}>
-            <Text style={[styles.discrepancyText, { color: parsedQty === 0 ? '#c0392b' : '#e67e22' }]}>
-              {parsedQty === 0 ? '⚠️ Out of stock' : parsedQty < current.expected_quantity ? `⬇️ ${current.expected_quantity - parsedQty} short` : `⬆️ ${parsedQty - current.expected_quantity} over`}
+      <SectionList
+        sections={sections}
+        keyExtractor={c => c.slot_id}
+        contentContainerStyle={[styles.list, { paddingBottom: 120 + insets.bottom }]}
+        stickySectionHeadersEnabled={false}
+        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        renderSectionHeader={({ section }) => (
+          <View style={[styles.sectionHeader, { borderLeftColor: accent }]}>
+            <Text style={styles.sectionEmoji}>{TYPE_EMOJI[section.container_type] ?? '📦'}</Text>
+            <Text style={styles.sectionName}>{section.container_name}</Text>
+            <Text style={styles.sectionCount}>
+              {section.data.filter((i: ItemCheck) => i.state !== 'unchecked').length}/{section.data.length}
             </Text>
           </View>
         )}
-      </ScrollView>
+        renderSectionFooter={() => <View style={{ height: 16 }} />}
+        renderItem={({ item: c }) => {
+          const isChecked = c.state !== 'unchecked';
+          const color = c.state === 'unchecked' ? '#aaa' : c.state === 'adjusted' ? '#e67e22' : accent;
 
-      {/* Action buttons */}
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.backBtn} onPress={goBack}>
-          <Text style={styles.backBtnText}>← Back</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.skipBtn} onPress={() => submitCount(true)}>
-          <Text style={styles.skipBtnText}>Skip</Text>
-        </TouchableOpacity>
+          return (
+            <TouchableOpacity
+              style={[styles.card, isChecked && styles.cardChecked]}
+              onPress={() => tapItem(c.slot_id)}
+              onLongPress={() => uncheckItem(c.slot_id)}
+              delayLongPress={400}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, isChecked && { backgroundColor: color, borderColor: color }]}>
+                {isChecked && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+
+              <View style={styles.cardBody}>
+                {c.category && <Text style={styles.categoryLabel}>{c.category}</Text>}
+                <Text style={[styles.itemName, isChecked && styles.itemNameChecked]}>{c.item_name}</Text>
+                {c.editing ? (
+                  <TextInput
+                    ref={editRef}
+                    style={styles.inlineInput}
+                    defaultValue={String(c.quantity)}
+                    keyboardType="numeric"
+                    returnKeyType="done"
+                    onEndEditing={e => commitQty(c.slot_id, e.nativeEvent.text)}
+                    onSubmitEditing={e => commitQty(c.slot_id, e.nativeEvent.text)}
+                    selectTextOnFocus
+                  />
+                ) : (
+                  <Text style={[styles.qtyLabel, { color }]}>
+                    {c.state === 'unchecked'
+                      ? `Expected: ${c.expected_quantity} ${c.unit_of_measure}`
+                      : `${c.quantity} / ${c.expected_quantity} ${c.unit_of_measure}`}
+                  </Text>
+                )}
+              </View>
+
+              {isChecked && !c.editing && (
+                <Text style={styles.hint}>tap to adjust · hold to uncheck</Text>
+              )}
+            </TouchableOpacity>
+          );
+        }}
+      />
+
+      <View style={[styles.footer, { paddingBottom: 16 + insets.bottom }]}>
+        {checkedCount < total && (
+          <Text style={styles.remainingNote}>
+            {total - checkedCount} item{total - checkedCount !== 1 ? 's' : ''} remaining
+          </Text>
+        )}
         <TouchableOpacity
-          style={[styles.nextBtn, { backgroundColor: accent }, saving && styles.disabled]}
-          onPress={() => submitCount()}
+          style={[styles.finishBtn, { backgroundColor: accent }, saving && styles.disabled]}
+          onPress={finish}
           disabled={saving}
         >
-          <Text style={styles.nextBtnText}>
-            {saving ? '…' : step + 1 >= total ? 'Finish ✓' : 'Next →'}
+          <Text style={styles.finishBtnText}>
+            {saving ? 'Saving…' : checkedCount === total ? 'Finish Audit ✓' : 'Finish Audit'}
           </Text>
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -200,41 +240,44 @@ const styles = StyleSheet.create({
   empty: { color: '#999' },
   progressBg: { height: 4, backgroundColor: '#e0d8cc' },
   progressFill: { height: 4 },
-  progressLabel: { textAlign: 'right', fontSize: 12, color: '#aaa', paddingRight: 16, paddingTop: 6 },
-  content: { padding: 24, paddingBottom: 24 },
-  containerHeader: {
+  progressLabel: { textAlign: 'right', fontSize: 12, color: '#aaa', paddingRight: 16, paddingTop: 6, paddingBottom: 4 },
+  list: { padding: 16 },
+  sectionHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    borderLeftWidth: 4, paddingLeft: 12, marginBottom: 20,
+    borderLeftWidth: 4, paddingLeft: 10, marginBottom: 10, marginTop: 4,
   },
-  containerHeaderEmoji: { fontSize: 22 },
-  containerHeaderName: { fontSize: 16, fontWeight: '700', color: '#555' },
-  itemCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 20,
-    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
-    marginBottom: 28,
+  sectionEmoji: { fontSize: 18 },
+  sectionName: { flex: 1, fontSize: 15, fontWeight: '700', color: '#444' },
+  sectionCount: { fontSize: 12, color: '#aaa', fontWeight: '600' },
+  card: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
+    borderRadius: 12, padding: 14, gap: 12,
+    borderWidth: 1.5, borderColor: '#e0d8cc',
   },
-  category: { fontSize: 12, color: '#aaa', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
-  itemName: { fontSize: 24, fontWeight: '800', color: '#1a1a1a', marginBottom: 8 },
-  expected: { fontSize: 14, color: '#888' },
-  lastCount: { fontSize: 13, color: '#bbb', marginTop: 4 },
-  countLabel: { fontSize: 14, fontWeight: '700', color: '#555', marginBottom: 10 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  countInput: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 12, borderWidth: 2,
-    padding: 16, fontSize: 36, fontWeight: '700', color: '#1a1a1a', textAlign: 'center',
+  cardChecked: { borderColor: 'transparent', backgroundColor: '#f8fdf8' },
+  checkbox: {
+    width: 28, height: 28, borderRadius: 14, borderWidth: 2,
+    borderColor: '#ccc', alignItems: 'center', justifyContent: 'center',
   },
-  unitLabel: { fontSize: 16, color: '#888', width: 60 },
-  discrepancy: { borderRadius: 10, padding: 12, alignItems: 'center' },
-  discrepancyText: { fontSize: 15, fontWeight: '700' },
-  actions: {
-    flexDirection: 'row', gap: 8, padding: 16, paddingBottom: 32,
-    borderTopWidth: 1, borderTopColor: '#e8e0d4', backgroundColor: '#f5f0e8',
+  checkmark: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  cardBody: { flex: 1 },
+  categoryLabel: { fontSize: 10, color: '#aaa', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 },
+  itemName: { fontSize: 15, fontWeight: '600', color: '#555' },
+  itemNameChecked: { color: '#1a1a1a' },
+  qtyLabel: { fontSize: 12, marginTop: 2, fontWeight: '600' },
+  inlineInput: {
+    fontSize: 18, fontWeight: '700', color: '#1a1a1a',
+    borderBottomWidth: 2, borderBottomColor: '#2d5a27',
+    paddingVertical: 2, marginTop: 2, minWidth: 60,
   },
-  backBtn: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#e8e0d4' },
-  backBtnText: { color: '#666', fontWeight: '600' },
-  skipBtn: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#e8e0d4' },
-  skipBtnText: { color: '#666', fontWeight: '600' },
-  nextBtn: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
-  nextBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  hint: { fontSize: 10, color: '#bbb', textAlign: 'right', flexShrink: 1 },
+  footer: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    padding: 16, backgroundColor: '#f5f0e8',
+    borderTopWidth: 1, borderTopColor: '#e8e0d4',
+  },
+  remainingNote: { textAlign: 'center', fontSize: 13, color: '#aaa', marginBottom: 8 },
+  finishBtn: { padding: 16, borderRadius: 12, alignItems: 'center' },
+  finishBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   disabled: { opacity: 0.6 },
 });

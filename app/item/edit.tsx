@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Switch } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
@@ -15,6 +15,8 @@ export default function EditItem() {
   const [unitOfMeasure, setUnitOfMeasure] = useState('each');
   const [expectedQty, setExpectedQty] = useState('1');
   const [minQty, setMinQty] = useState('');
+  const [isPerishable, setIsPerishable] = useState(false);
+  const [itemId, setItemId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -24,17 +26,19 @@ export default function EditItem() {
     (async () => {
       const { data } = await supabase
         .from('item_slots')
-        .select(`expected_quantity, items(name, category, unit_of_measure, min_quantity)`)
+        .select(`expected_quantity, items(id, name, category, unit_of_measure, min_quantity, is_perishable)`)
         .eq('id', slot_id)
         .single();
 
       if (data) {
         const item = data.items as any;
+        setItemId(item.id);
         setItemName(item.name);
         setCategory(item.category ?? '');
         setUnitOfMeasure(item.unit_of_measure);
         setExpectedQty(String(data.expected_quantity));
         setMinQty(item.min_quantity != null ? String(item.min_quantity) : '');
+        setIsPerishable(item.is_perishable ?? false);
       }
       setLoaded(true);
     })();
@@ -55,6 +59,10 @@ export default function EditItem() {
       p_expected_qty: expected,
       p_min_qty: isNaN(minVal as any) ? null : minVal,
     });
+
+    if (!error && itemId) {
+      await supabase.rpc('set_item_perishable', { p_item_id: itemId, p_perishable: isPerishable });
+    }
     setSaving(false);
 
     if (error) {
@@ -141,6 +149,19 @@ export default function EditItem() {
       />
       <Text style={styles.hint}>Triggers LOW badge and shopping list prompt when reached.</Text>
 
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleLabel}>
+          <Text style={styles.toggleTitle}>Track Expiration Dates</Text>
+          <Text style={styles.toggleSub}>For food and other perishables</Text>
+        </View>
+        <Switch
+          value={isPerishable}
+          onValueChange={setIsPerishable}
+          trackColor={{ false: '#e0d8cc', true: currentUnit?.accent_color ?? '#2d5a27' }}
+          thumbColor="#fff"
+        />
+      </View>
+
       <TouchableOpacity
         style={[styles.saveBtn, { backgroundColor: currentUnit?.accent_color ?? '#2d5a27' }, saving && styles.disabled]}
         onPress={save}
@@ -174,6 +195,13 @@ const styles = StyleSheet.create({
     borderColor: '#e0d8cc',
   },
   hint: { fontSize: 12, color: '#aaa', marginTop: 6 },
+  toggleRow: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
+    borderRadius: 12, padding: 16, marginTop: 20, borderWidth: 1, borderColor: '#e0d8cc',
+  },
+  toggleLabel: { flex: 1 },
+  toggleTitle: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
+  toggleSub: { fontSize: 12, color: '#aaa', marginTop: 2 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     backgroundColor: '#fff',
