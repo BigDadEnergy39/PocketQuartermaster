@@ -33,9 +33,7 @@ function RootNavigator({ session }: { session: Session | null }) {
       <Stack.Screen name="item/[slot_id]" options={{ headerShown: true, title: 'Item Detail' }} />
       <Stack.Screen name="item/add" options={{ headerShown: true, title: 'Add Item' }} />
       <Stack.Screen name="item/edit" options={{ headerShown: true, title: 'Edit Item' }} />
-      <Stack.Screen name="trip/add" options={{ headerShown: true, title: 'Plan a Trip' }} />
-      <Stack.Screen name="trip/[id]" options={{ headerShown: true, title: 'Trip' }} />
-      <Stack.Screen name="audit/index" options={{ headerShown: true, title: 'Inventory Audit' }} />
+<Stack.Screen name="audit/index" options={{ headerShown: true, title: 'Inventory Audit' }} />
       <Stack.Screen name="audit/conduct" options={{ headerShown: true, title: 'Audit', headerBackVisible: false }} />
       <Stack.Screen name="audit/summary" options={{ headerShown: true, title: 'Audit Results', headerBackVisible: false }} />
     </Stack>

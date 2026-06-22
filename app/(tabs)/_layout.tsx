@@ -52,11 +52,7 @@ export default function TabLayout() {
         name="shopping"
         options={{ title: 'Shopping', tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🛒</Text> }}
       />
-      <Tabs.Screen
-        name="trips"
-        options={{ title: 'Trips', tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🏕️</Text> }}
-      />
-      <Tabs.Screen
+<Tabs.Screen
         name="settings"
         options={{ title: 'Settings', tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>⚙️</Text> }}
       />
