@@ -31,6 +31,7 @@ export default function ContainerCheck() {
   const [checks, setChecks] = useState<ItemCheck[]>([]);
   const [saving, setSaving] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [selectedMissing, setSelectedMissing] = useState<Set<string>>(new Set());
   const editRef = useRef<TextInput>(null);
 
   const accent = currentUnit?.accent_color ?? '#2d5a27';
@@ -119,23 +120,40 @@ export default function ContainerCheck() {
       return;
     }
 
+    setSelectedMissing(new Set(missing.map(c => c.slot_id)));
     setShowSummary(true);
   }
 
   async function addMissingToShopping() {
     if (!currentUnit) return;
-    for (const c of missing) {
-      await supabase.rpc('add_to_shopping_list', {
+    const toAdd = missing.filter(c => selectedMissing.has(c.slot_id));
+    const errors: string[] = [];
+    for (const c of toAdd) {
+      const { error } = await supabase.rpc('add_to_shopping_list', {
         p_unit_id: currentUnit.id,
         p_item_name: c.item_name,
         p_quantity: c.expected_quantity,
         p_unit_of_measure: c.unit_of_measure,
         p_notes: 'Missing from contents check',
       });
+      if (error) errors.push(`${c.item_name}: ${error.message}`);
     }
-    Alert.alert('Added', `${missing.length} item${missing.length !== 1 ? 's' : ''} added to the shopping list.`);
-    setShowSummary(false);
-    router.back();
+    if (errors.length) {
+      Alert.alert('Some items failed', errors.join('\n'));
+    } else {
+      Alert.alert('Added', `${toAdd.length} item${toAdd.length !== 1 ? 's' : ''} added to the shopping list.`, [
+        { text: 'OK', onPress: () => { setShowSummary(false); router.back(); } },
+      ]);
+    }
+  }
+
+  function toggleMissingSelected(slot_id: string) {
+    setSelectedMissing(prev => {
+      const next = new Set(prev);
+      if (next.has(slot_id)) next.delete(slot_id);
+      else next.add(slot_id);
+      return next;
+    });
   }
 
   if (loading) {
@@ -250,19 +268,34 @@ export default function ContainerCheck() {
             {missing.length > 0 && (
               <>
                 <Text style={styles.missingHeader}>Missing Items</Text>
+                <Text style={styles.missingSubhead}>Select items to add to the shopping list</Text>
                 <ScrollView style={styles.missingList}>
-                  {missing.map(c => (
-                    <View key={c.slot_id} style={styles.missingRow}>
-                      <Text style={styles.missingName}>{c.item_name}</Text>
-                      <Text style={styles.missingQty}>{c.expected_quantity} {c.unit_of_measure}</Text>
-                    </View>
-                  ))}
+                  {missing.map(c => {
+                    const selected = selectedMissing.has(c.slot_id);
+                    return (
+                      <TouchableOpacity
+                        key={c.slot_id}
+                        style={styles.missingRow}
+                        onPress={() => toggleMissingSelected(c.slot_id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.missingCheck, selected && { backgroundColor: '#e67e22', borderColor: '#e67e22' }]}>
+                          {selected && <Text style={styles.missingCheckmark}>✓</Text>}
+                        </View>
+                        <Text style={[styles.missingName, !selected && { color: '#aaa' }]}>{c.item_name}</Text>
+                        <Text style={[styles.missingQty, !selected && { color: '#ccc' }]}>{c.expected_quantity} {c.unit_of_measure}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </ScrollView>
                 <TouchableOpacity
-                  style={[styles.shoppingBtn, { borderColor: '#e67e22' }]}
+                  style={[styles.shoppingBtn, { borderColor: '#e67e22' }, selectedMissing.size === 0 && styles.shoppingBtnDisabled]}
                   onPress={addMissingToShopping}
+                  disabled={selectedMissing.size === 0}
                 >
-                  <Text style={styles.shoppingBtnText}>🛒 Add Missing to Shopping List</Text>
+                  <Text style={styles.shoppingBtnText}>
+                    🛒 Add to Shopping List ({selectedMissing.size})
+                  </Text>
                 </TouchableOpacity>
               </>
             )}
@@ -325,15 +358,22 @@ const styles = StyleSheet.create({
   pill: { flex: 1, borderRadius: 12, padding: 14, alignItems: 'center' },
   pillNum: { fontSize: 28, fontWeight: '800' },
   pillLabel: { fontSize: 11, color: '#888', marginTop: 2, fontWeight: '600' },
-  missingHeader: { fontSize: 13, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-  missingList: { maxHeight: 160, marginBottom: 16 },
-  missingRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0ebe3' },
-  missingName: { fontSize: 14, color: '#1a1a1a', fontWeight: '500' },
+  missingHeader: { fontSize: 13, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
+  missingSubhead: { fontSize: 12, color: '#aaa', marginBottom: 10 },
+  missingList: { maxHeight: 200, marginBottom: 16 },
+  missingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0ebe3', gap: 10 },
+  missingCheck: {
+    width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#ccc',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  missingCheckmark: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  missingName: { flex: 1, fontSize: 14, color: '#1a1a1a', fontWeight: '500' },
   missingQty: { fontSize: 13, color: '#888' },
   shoppingBtn: {
     borderWidth: 1.5, borderRadius: 10, padding: 14,
     alignItems: 'center', marginBottom: 12,
   },
+  shoppingBtnDisabled: { opacity: 0.4 },
   shoppingBtnText: { color: '#e67e22', fontSize: 15, fontWeight: '700' },
   doneBtn: { padding: 16, borderRadius: 12, alignItems: 'center' },
   doneBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },

@@ -162,21 +162,39 @@ $$;
 -- ─────────────────────────────────────────────────────────────────────────────
 
 create or replace function add_to_shopping_list(
-  p_unit_id        uuid,
-  p_item_name      text,
-  p_quantity       integer,
+  p_unit_id         uuid,
+  p_item_name       text,
+  p_quantity        integer,
   p_unit_of_measure text,
-  p_notes          text default null,
-  p_unit_price     numeric default null
+  p_notes           text default null,
+  p_unit_price      numeric default null
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
 begin
   if not is_unit_member(p_unit_id) then
     raise exception 'Not a member of this unit';
   end if;
-  insert into unit_shopping_items(unit_id, item_name, quantity, unit_of_measure, notes, unit_price)
-  values(p_unit_id, p_item_name, p_quantity, p_unit_of_measure, p_notes, p_unit_price)
-  returning id into v_id;
+
+  select id into v_id
+  from unit_shopping_items
+  where unit_id = p_unit_id and lower(item_name) = lower(p_item_name)
+  limit 1;
+
+  if v_id is not null then
+    update unit_shopping_items
+    set is_purchased    = false,
+        purchased_at    = null,
+        quantity        = quantity + p_quantity,
+        unit_of_measure = p_unit_of_measure,
+        notes           = p_notes,
+        unit_price      = coalesce(p_unit_price, unit_price)
+    where id = v_id;
+  else
+    insert into unit_shopping_items(unit_id, item_name, quantity, unit_of_measure, notes, unit_price, added_by)
+    values(p_unit_id, p_item_name, p_quantity, p_unit_of_measure, p_notes, p_unit_price, auth.uid())
+    returning id into v_id;
+  end if;
+
   return v_id;
 end;
 $$;
