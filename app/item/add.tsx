@@ -4,6 +4,24 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
 
+function CategoryAutocomplete({ categories, current, onSelect }: {
+  categories: string[]; current: string; onSelect: (v: string) => void;
+}) {
+  const matches = categories.filter(c =>
+    !current || c.toLowerCase().includes(current.toLowerCase())
+  );
+  if (!matches.length) return null;
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.acRow} keyboardShouldPersistTaps="always">
+      {matches.map(c => (
+        <TouchableOpacity key={c} style={styles.acChip} onPress={() => onSelect(c)}>
+          <Text style={styles.acChipText}>{c}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+
 const UNITS_OF_MEASURE = ['each', 'pack', 'box', 'bag', 'bottle', 'can', 'roll', 'pair', 'set', 'lb', 'oz', 'gallon'];
 
 export default function AddItem() {
@@ -18,6 +36,14 @@ export default function AddItem() {
   const [suggestions, setSuggestions] = useState<{ id: string; name: string; category: string | null; unit_of_measure: string }[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [categoryFocused, setCategoryFocused] = useState(false);
+
+  useEffect(() => {
+    if (!currentUnit) return;
+    supabase.rpc('get_item_categories', { p_unit_id: currentUnit.id })
+      .then(({ data }) => { if (data) setCategories(data.map((r: any) => r.category)); });
+  }, [currentUnit?.id]);
 
   useEffect(() => {
     if (itemName.length < 2 || selectedItemId) { setSuggestions([]); return; }
@@ -100,7 +126,12 @@ export default function AddItem() {
             onChangeText={setCategory}
             placeholder="e.g. Kitchen, First Aid"
             placeholderTextColor="#aaa"
+            onFocus={() => setCategoryFocused(true)}
+            onBlur={() => setCategoryFocused(false)}
           />
+          {categoryFocused && (
+            <CategoryAutocomplete categories={categories} current={category} onSelect={v => { setCategory(v); setCategoryFocused(false); }} />
+          )}
 
           <Text style={styles.label}>Unit of Measure</Text>
           <View style={styles.chipRow}>
@@ -195,4 +226,7 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cancelBtn: { padding: 16, alignItems: 'center', marginTop: 8 },
   cancelText: { color: '#888', fontSize: 15 },
+  acRow: { marginTop: 6 },
+  acChip: { backgroundColor: '#e8f0e8', borderRadius: 16, paddingVertical: 5, paddingHorizontal: 12, marginRight: 6 },
+  acChipText: { fontSize: 13, color: '#2d5a27', fontWeight: '600' },
 });

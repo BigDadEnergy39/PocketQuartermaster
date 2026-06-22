@@ -92,23 +92,33 @@ export default function ContainerCheck() {
 
   async function finish() {
     setSaving(true);
+    const errors: string[] = [];
+
     const toRecord = checks.filter(c => c.state !== 'unchecked');
     for (const c of toRecord) {
-      await supabase.rpc('record_quantity', {
+      const { error } = await supabase.rpc('record_quantity', {
         p_slot_id: c.slot_id,
         p_quantity: c.quantity,
         p_notes: c.state === 'adjusted' ? `Contents check — adjusted from expected ${c.expected_quantity}` : null,
       });
+      if (error) errors.push(`${c.item_name}: ${error.message}`);
     }
-    // Record missing items as 0
     for (const c of missing) {
-      await supabase.rpc('record_quantity', {
+      const { error } = await supabase.rpc('record_quantity', {
         p_slot_id: c.slot_id,
         p_quantity: 0,
         p_notes: 'Contents check — not found',
       });
+      if (error) errors.push(`${c.item_name}: ${error.message}`);
     }
+
     setSaving(false);
+
+    if (errors.length > 0) {
+      Alert.alert('Some items failed to save', errors.join('\n'));
+      return;
+    }
+
     setShowSummary(true);
   }
 

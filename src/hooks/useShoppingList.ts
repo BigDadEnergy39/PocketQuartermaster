@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
+export interface ItemTag {
+  type_id: string;
+  type_name: string;
+  value: string;
+}
+
 export interface ShoppingItem {
   id: string;
   item_id: string | null;
@@ -10,6 +16,8 @@ export interface ShoppingItem {
   notes: string | null;
   is_purchased: boolean;
   created_at: string;
+  unit_price: number | null;
+  tags: ItemTag[];
 }
 
 export function useShoppingList(unitId: string | undefined) {

@@ -8,6 +8,7 @@ import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
 import { useUnits } from '../../src/hooks/useUnits';
 import ColorPicker from '../../src/components/ColorPicker';
+import { useShoppingCategories, CategoryType } from '../../src/hooks/useShoppingCategories';
 
 interface Member { user_id: string; display_name: string; role: string; joined_at: string; }
 interface InviteCode { id: string; code: string; use_count: number; max_uses: number | null; expires_at: string | null; }
@@ -38,6 +39,12 @@ export default function Settings() {
 
   const myRole = units.find(u => u.id === currentUnit?.id)?.role ?? 'member';
   const isQM = myRole === 'quartermaster' || myRole === 'assistant_quartermaster';
+
+  const { categoryTypes, refetch: refetchCategories } = useShoppingCategories(currentUnit?.id);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+  const [newCatName, setNewCatName] = useState('');
+  const [addingCat, setAddingCat] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -107,6 +114,35 @@ export default function Settings() {
     ]);
   }
 
+  async function saveCategoryName(cat: CategoryType) {
+    const name = editingCatName.trim();
+    if (!name) { Alert.alert('Name required'); return; }
+    await supabase.rpc('upsert_shopping_category_type', { p_unit_id: currentUnit!.id, p_name: name, p_id: cat.id });
+    setEditingCatId(null);
+    refetchCategories();
+  }
+
+  async function addCategory() {
+    const name = newCatName.trim();
+    if (!name) return;
+    await supabase.rpc('upsert_shopping_category_type', { p_unit_id: currentUnit!.id, p_name: name });
+    setNewCatName('');
+    setAddingCat(false);
+    refetchCategories();
+  }
+
+  function confirmDeleteCategory(cat: CategoryType) {
+    Alert.alert('Delete Category', `Delete "${cat.name}"? All tags using this category will be removed.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          await supabase.rpc('delete_shopping_category_type', { p_id: cat.id });
+          refetchCategories();
+        },
+      },
+    ]);
+  }
+
   async function saveUnitSettings() {
     if (!currentUnit || !editName.trim()) { Alert.alert('Name required'); return; }
     setSavingUnit(true);
@@ -128,7 +164,7 @@ export default function Settings() {
   const accent = currentUnit.accent_color;
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
 
       {/* Unit header */}
       <View style={[styles.unitBanner, { backgroundColor: accent }]}>
@@ -253,6 +289,74 @@ export default function Settings() {
         </>
       )}
 
+      {/* Shopping categories */}
+      <Text style={styles.sectionHeader}>Shopping Categories</Text>
+      <View style={styles.card}>
+        <Text style={styles.fieldLabel}>
+          Define custom grouping dimensions for your shopping lists (e.g. Store, Section, Shopper).
+        </Text>
+        {categoryTypes.map((cat, i) => (
+          <View key={cat.id} style={[styles.memberRow, i < categoryTypes.length - 1 && styles.memberDivider]}>
+            {editingCatId === cat.id ? (
+              <View style={[styles.row, { flex: 1 }]}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={editingCatName}
+                  onChangeText={setEditingCatName}
+                  autoFocus
+                  onSubmitEditing={() => saveCategoryName(cat)}
+                />
+                <TouchableOpacity style={[styles.inlineBtn, { backgroundColor: accent }]} onPress={() => saveCategoryName(cat)}>
+                  <Text style={styles.inlineBtnText}>Save</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.inlineBtn, { backgroundColor: '#eee' }]} onPress={() => setEditingCatId(null)}>
+                  <Text style={[styles.inlineBtnText, { color: '#666' }]}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <Text style={[styles.memberName, { flex: 1 }]}>{cat.name}</Text>
+                <TouchableOpacity onPress={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); }} style={{ padding: 6 }}>
+                  <Text style={[styles.shareBtnText, { color: accent }]}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => confirmDeleteCategory(cat)} style={{ padding: 6 }}>
+                  <Text style={styles.deactivateBtn}>✕</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        ))}
+        {categoryTypes.length === 0 && !addingCat && (
+          <Text style={styles.emptyCard}>No categories yet. Add one to start organizing your lists.</Text>
+        )}
+        {addingCat ? (
+          <View style={[styles.row, { marginTop: 12 }]}>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={newCatName}
+              onChangeText={setNewCatName}
+              placeholder="e.g. Store, Section, Shopper"
+              placeholderTextColor="#aaa"
+              autoFocus
+              onSubmitEditing={addCategory}
+            />
+            <TouchableOpacity style={[styles.inlineBtn, { backgroundColor: accent }]} onPress={addCategory}>
+              <Text style={styles.inlineBtnText}>Add</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.inlineBtn, { backgroundColor: '#eee' }]} onPress={() => { setAddingCat(false); setNewCatName(''); }}>
+              <Text style={[styles.inlineBtnText, { color: '#666' }]}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.generateBtn, { borderColor: accent, marginTop: categoryTypes.length > 0 ? 12 : 4 }]}
+            onPress={() => setAddingCat(true)}
+          >
+            <Text style={[styles.generateBtnText, { color: accent }]}>+ Add Category</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Sign out */}
       <TouchableOpacity style={styles.signOut} onPress={() => supabase.auth.signOut()}>
         <Text style={styles.signOutText}>Sign Out</Text>
@@ -264,7 +368,7 @@ export default function Settings() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#f5f0e8' },
-  content: { padding: 16, paddingBottom: 60 },
+  content: { padding: 16, paddingBottom: 300 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f0e8' },
   empty: { color: '#999' },
   unitBanner: { borderRadius: 14, padding: 20, marginBottom: 24 },
