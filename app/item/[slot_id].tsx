@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, TextInput, Alert,
-  ScrollView, Modal, Platform,
+  ScrollView, Modal,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, router, useNavigation, useFocusEffect } from 'expo-router';
+import ExpirationDatePicker from '../../src/components/ExpirationDatePicker';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
 
@@ -50,7 +50,6 @@ export default function ItemDetail() {
   const [showAddLot, setShowAddLot] = useState(false);
   const [lotQty, setLotQty] = useState('1');
   const [lotDate, setLotDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(Platform.OS === 'ios');
   const [addingLot, setAddingLot] = useState(false);
 
   const accent = currentUnit?.accent_color ?? '#2d5a27';
@@ -149,7 +148,8 @@ export default function ItemDetail() {
     const qty = parseInt(lotQty, 10);
     if (isNaN(qty) || qty < 1) { Alert.alert('Invalid quantity', 'Enter a positive number.'); return; }
     setAddingLot(true);
-    const dateStr = lotDate.toISOString().split('T')[0];
+    // Local YYYY-MM-DD — toISOString() would shift the day in timezones behind UTC.
+    const dateStr = `${lotDate.getFullYear()}-${String(lotDate.getMonth() + 1).padStart(2, '0')}-${String(lotDate.getDate()).padStart(2, '0')}`;
     const { error } = await supabase.rpc('add_expiration_lot', {
       p_slot_id: slot_id,
       p_expiration_date: dateStr,
@@ -160,7 +160,6 @@ export default function ItemDetail() {
     setShowAddLot(false);
     setLotQty('1');
     setLotDate(new Date());
-    if (Platform.OS === 'android') setShowDatePicker(false);
     await loadLots();
     if (saved) setTimeout(() => router.back(), 400);
   }
@@ -329,23 +328,7 @@ export default function ItemDetail() {
             />
 
             <Text style={styles.modalLabel}>Expiration Date</Text>
-            {Platform.OS === 'android' && (
-              <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
-                <Text style={styles.dateBtnText}>{lotDate.toLocaleDateString()}</Text>
-              </TouchableOpacity>
-            )}
-            {(showDatePicker || Platform.OS === 'ios') && (
-              <DateTimePicker
-                value={lotDate}
-                mode="date"
-                minimumDate={new Date()}
-                onChange={(_, date) => {
-                  if (Platform.OS === 'android') setShowDatePicker(false);
-                  if (date) setLotDate(date);
-                }}
-                display={Platform.OS === 'ios' ? 'inline' : 'default'}
-              />
-            )}
+            <ExpirationDatePicker value={lotDate} onChange={setLotDate} minimumDate={new Date()} />
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -432,8 +415,6 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', marginBottom: 20 },
   modalLabel: { fontSize: 13, fontWeight: '700', color: '#555', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
   modalInput: { backgroundColor: '#f5f0e8', borderRadius: 10, padding: 14, fontSize: 20, color: '#1a1a1a' },
-  dateBtn: { backgroundColor: '#f5f0e8', borderRadius: 10, padding: 14 },
-  dateBtnText: { fontSize: 16, color: '#1a1a1a' },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
   modalCancel: { flex: 1, padding: 14, borderRadius: 10, alignItems: 'center', backgroundColor: '#f5f0e8' },
   modalCancelText: { color: '#666', fontWeight: '600', fontSize: 15 },

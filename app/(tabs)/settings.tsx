@@ -17,10 +17,17 @@ function roleLabel(role: string) {
   return role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+const ROLE_OPTIONS = [
+  'quartermaster',
+  'assistant_quartermaster',
+  'youth_quartermaster',
+  'member',
+] as const;
+
 export default function Settings() {
   const { currentUnit, setCurrentUnit } = useUnit();
   const [userId, setUserId] = useState<string | undefined>();
-  const { units } = useUnits(userId);
+  const { units, refetch: refetchUnits } = useUnits(userId);
 
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<InviteCode[]>([]);
@@ -39,6 +46,11 @@ export default function Settings() {
 
   const myRole = units.find(u => u.id === currentUnit?.id)?.role ?? 'member';
   const isQM = myRole === 'quartermaster' || myRole === 'assistant_quartermaster';
+  const isFullQM = myRole === 'quartermaster';
+
+  // Member role management (QM/AQM only)
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [savingRole, setSavingRole] = useState(false);
 
   const { categoryTypes, refetch: refetchCategories } = useShoppingCategories(currentUnit?.id);
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
@@ -112,6 +124,33 @@ export default function Settings() {
         },
       },
     ]);
+  }
+
+  function changeRole(member: Member, newRole: string) {
+    if (member.role === newRole) { setExpandedMemberId(null); return; }
+    const isSelf = member.user_id === userId;
+    Alert.alert(
+      'Change Role',
+      `Change ${isSelf ? 'your role' : member.display_name} to ${roleLabel(newRole)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Change', onPress: async () => {
+            setSavingRole(true);
+            const { error } = await supabase.rpc('set_member_role', {
+              p_unit_id: currentUnit!.id,
+              p_user_id: member.user_id,
+              p_role: newRole,
+            });
+            setSavingRole(false);
+            if (error) { Alert.alert('Error', error.message); return; }
+            setExpandedMemberId(null);
+            await loadUnitData();
+            if (isSelf) refetchUnits(); // my own role changed — refresh derived permissions
+          },
+        },
+      ],
+    );
   }
 
   async function saveCategoryName(cat: CategoryType) {
@@ -197,17 +236,60 @@ export default function Settings() {
       {/* Members */}
       <Text style={styles.sectionHeader}>Members ({members.length})</Text>
       <View style={styles.card}>
-        {loading ? <ActivityIndicator color={accent} /> : members.map((m, i) => (
-          <View key={m.user_id} style={[styles.memberRow, i < members.length - 1 && styles.memberDivider]}>
-            <View style={[styles.avatar, { backgroundColor: accent }]}>
-              <Text style={styles.avatarText}>{(m.display_name?.[0] ?? '?').toUpperCase()}</Text>
+        {loading ? <ActivityIndicator color={accent} /> : members.map((m, i) => {
+          // AQMs may manage everyone except the full QM and the QM role itself.
+          const canEdit = isQM && (isFullQM || m.role !== 'quartermaster');
+          const expanded = expandedMemberId === m.user_id;
+          return (
+            <View key={m.user_id} style={i < members.length - 1 && styles.memberDivider}>
+              <TouchableOpacity
+                activeOpacity={canEdit ? 0.6 : 1}
+                onPress={() => canEdit && setExpandedMemberId(expanded ? null : m.user_id)}
+                style={styles.memberRow}
+              >
+                <View style={[styles.avatar, { backgroundColor: accent }]}>
+                  <Text style={styles.avatarText}>{(m.display_name?.[0] ?? '?').toUpperCase()}</Text>
+                </View>
+                <View style={styles.memberInfo}>
+                  <Text style={styles.memberName}>
+                    {m.display_name}{m.user_id === userId ? ' (you)' : ''}
+                  </Text>
+                  <Text style={styles.memberRole}>{roleLabel(m.role)}</Text>
+                </View>
+                {canEdit && <Text style={styles.chevron}>{expanded ? '▾' : '›'}</Text>}
+              </TouchableOpacity>
+              {expanded && (
+                <View style={styles.rolePicker}>
+                  {ROLE_OPTIONS.map(role => {
+                    const selected = m.role === role;
+                    // Only a full QM may assign the quartermaster role.
+                    const disabled = savingRole || (role === 'quartermaster' && !isFullQM);
+                    return (
+                      <TouchableOpacity
+                        key={role}
+                        disabled={disabled}
+                        onPress={() => changeRole(m, role)}
+                        style={[
+                          styles.roleChip,
+                          selected && { backgroundColor: accent, borderColor: accent },
+                          disabled && !selected && styles.roleChipDisabled,
+                        ]}
+                      >
+                        <Text style={[
+                          styles.roleChipText,
+                          selected && { color: '#fff' },
+                          disabled && !selected && { color: '#c4bdb2' },
+                        ]}>
+                          {roleLabel(role)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
             </View>
-            <View style={styles.memberInfo}>
-              <Text style={styles.memberName}>{m.display_name}</Text>
-              <Text style={styles.memberRole}>{roleLabel(m.role)}</Text>
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       {/* Invite codes (QMs only) */}
@@ -397,6 +479,11 @@ const styles = StyleSheet.create({
   memberInfo: { flex: 1 },
   memberName: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
   memberRole: { fontSize: 12, color: '#999', marginTop: 1, textTransform: 'capitalize' },
+  chevron: { fontSize: 18, color: '#bbb', fontWeight: '700', paddingHorizontal: 4 },
+  rolePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 12, paddingLeft: 48 },
+  roleChip: { borderWidth: 1.5, borderColor: '#e0d8cc', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 14 },
+  roleChipDisabled: { borderColor: '#efe9df', backgroundColor: '#faf7f1' },
+  roleChipText: { fontSize: 13, fontWeight: '600', color: '#666' },
   inviteRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0ebe3' },
   inviteInfo: { flex: 1 },
   inviteCode: { fontSize: 20, fontWeight: '800', letterSpacing: 2, color: '#1a1a1a', fontFamily: 'monospace' },
