@@ -25,3 +25,25 @@ logged-in users. Follow these rules without exception:
 5. **Client uses the anon key only.** The `service_role` key must never appear in
    the app, `.env*`, or EAS env. Secrets stay out of git (`.env*.local`,
    `gradle.properties`, `*.keystore` are gitignored).
+
+# Migration Workflow (Supabase CLI)
+
+The database is managed **exclusively** through the Supabase CLI and the migrations
+in `supabase/migrations/`. The repo is the source of truth: a given commit's
+migrations describe the schema that commit's code expects, so a fresh
+`supabase db push` reproduces a compatible database.
+
+- **Never** paste DDL/DML into the Supabase SQL Editor for schema changes — that
+  silently drifts the live DB from the repo. (This caused real bugs here: tables
+  live without RLS, a policy changed out-of-band.)
+- **New change:** `supabase migration new <name>` → edit the generated
+  `supabase/migrations/<timestamp>_<name>.sql` → `supabase db push` to apply it to
+  the linked project (which records it in the remote migration ledger).
+- **Inspect / sync:** `supabase migration list` shows local-vs-remote; if the DB
+  ever drifts, `supabase db pull` captures the live schema as a migration.
+- The `001`–`024` files predate CLI adoption; they were **baselined** as
+  already-applied (marked in the ledger, never re-run). New migrations are
+  timestamp-named and sort after them.
+- Project/auth settings the repo can't express in SQL (e.g. `enable_signup = false`)
+  belong in `supabase/config.toml`, also version-controlled.
+- CI (`scripts/check-rls.mjs`) blocks any migration that creates a table without RLS.
