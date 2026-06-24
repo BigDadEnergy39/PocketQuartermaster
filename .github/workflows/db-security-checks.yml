@@ -1,0 +1,20 @@
+name: DB security checks
+
+# Guards against the most common Supabase footgun: creating a table without
+# enabling Row Level Security. Because the `authenticated` role has broad table
+# grants, RLS is the only thing protecting logged-in users' data.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rls-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Every created table must have RLS enabled
+        run: node scripts/check-rls.mjs
