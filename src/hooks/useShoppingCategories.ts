@@ -33,7 +33,9 @@ export function useShoppingCategories(unitId: string | undefined) {
     setLoading(false);
   }, [unitId]);
 
-  useFocusEffect(fetch);
+  // Call the async fetch without returning its Promise — useFocusEffect expects
+  // void or a cleanup function, not a thenable.
+  useFocusEffect(useCallback(() => { fetch(); }, [fetch]));
 
   return { categoryTypes, tagValues, loading, refetch: fetch };
 }

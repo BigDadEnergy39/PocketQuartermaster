@@ -3,7 +3,7 @@ import { UnitWithRole } from '../types';
 
 interface UnitContextValue {
   currentUnit: UnitWithRole | null;
-  setCurrentUnit: (unit: UnitWithRole) => void;
+  setCurrentUnit: (unit: UnitWithRole | null) => void;
 }
 
 const UnitContext = createContext<UnitContextValue>({

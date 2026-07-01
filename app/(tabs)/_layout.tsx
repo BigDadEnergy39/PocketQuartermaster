@@ -28,7 +28,11 @@ export default function TabLayout() {
   }, []);
 
   useEffect(() => {
-    if (!currentUnit && units.length > 0) {
+    if (units.length === 0) return;
+    // Pick a default when none is selected, AND correct a stale selection that
+    // isn't in *this* user's units — e.g. after switching accounts, the previous
+    // account's unit lingers in context and must not keep showing in the header.
+    if (!currentUnit || !units.some(u => u.id === currentUnit.id)) {
       setCurrentUnit(units[0]);
     }
   }, [units, currentUnit]);

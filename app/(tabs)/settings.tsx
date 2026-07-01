@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Share, ActivityIndicator,
 } from 'react-native';
 import { showAlert } from '../../src/lib/alert';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
 import { useUnits } from '../../src/hooks/useUnits';
@@ -43,6 +43,11 @@ export default function Settings() {
   // Display name editing
   const [displayName, setDisplayName] = useState('');
   const [savingName, setSavingName] = useState(false);
+
+  // Unit deletion (full QM-tier only) — gated behind typing the unit name
+  const [deletingUnit, setDeletingUnit] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
 
   const myRole = units.find(u => u.id === currentUnit?.id)?.role ?? 'member';
   const isQM = myRole === 'quartermaster' || myRole === 'assistant_quartermaster';
@@ -194,6 +199,44 @@ export default function Settings() {
     if (error) { showAlert('Error', error.message); return; }
     setCurrentUnit({ ...currentUnit, name: editName.trim(), accent_color: editColor });
     setEditingUnit(false);
+  }
+
+  // The typed name must match exactly before deletion is allowed.
+  const deleteNameMatches = deleteConfirmName.trim() === currentUnit?.name;
+
+  function confirmDeleteUnit() {
+    if (!currentUnit || !deleteNameMatches) return;
+    showAlert(
+      'Delete Unit',
+      `This permanently deletes "${currentUnit.name}" and ALL of its data — containers, items, quantities, audits, shopping lists, invite codes, and every member's access. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete Forever', style: 'destructive', onPress: performDeleteUnit },
+      ],
+    );
+  }
+
+  async function performDeleteUnit() {
+    if (!currentUnit) return;
+    const deletedId = currentUnit.id;
+    setDeleteInProgress(true);
+    const { error } = await supabase.rpc('delete_unit', { p_unit_id: deletedId });
+    setDeleteInProgress(false);
+    if (error) { showAlert('Error', error.message); return; }
+
+    // Route away from the now-deleted unit. Pick another unit if the user still
+    // belongs to one, otherwise send them back to onboarding.
+    const remaining = units.filter(u => u.id !== deletedId);
+    setDeletingUnit(false);
+    setDeleteConfirmName('');
+    if (remaining.length > 0) {
+      setCurrentUnit(remaining[0]);
+      refetchUnits();
+      router.replace('/(tabs)');
+    } else {
+      refetchUnits();
+      router.replace('/onboarding');
+    }
   }
 
   if (!currentUnit) {
@@ -371,6 +414,63 @@ export default function Settings() {
         </>
       )}
 
+      {/* Danger zone — delete unit (QMs only) */}
+      {isQM && (
+        <>
+          <Text style={styles.sectionHeader}>Danger Zone</Text>
+          <View style={styles.card}>
+            {!deletingUnit ? (
+              <TouchableOpacity
+                style={styles.deleteUnitBtn}
+                onPress={() => { setDeleteConfirmName(''); setDeletingUnit(true); }}
+              >
+                <Text style={styles.deleteUnitBtnText}>Delete Unit</Text>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <Text style={styles.dangerText}>
+                  Deleting "{currentUnit.name}" permanently removes all of its containers,
+                  items, quantities, audits, shopping lists, invite codes, and every member's
+                  access. This cannot be undone.
+                </Text>
+                <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
+                  Type the unit name to confirm
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={deleteConfirmName}
+                  onChangeText={setDeleteConfirmName}
+                  placeholder={currentUnit.name}
+                  placeholderTextColor="#aaa"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <View style={[styles.row, { marginTop: 12 }]}>
+                  <TouchableOpacity
+                    style={[
+                      styles.deleteConfirmBtn,
+                      (!deleteNameMatches || deleteInProgress) && styles.disabled,
+                    ]}
+                    onPress={confirmDeleteUnit}
+                    disabled={!deleteNameMatches || deleteInProgress}
+                  >
+                    <Text style={styles.saveBtnText}>
+                      {deleteInProgress ? 'Deleting…' : 'Delete Unit'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.cancelUnitBtn}
+                    onPress={() => { setDeletingUnit(false); setDeleteConfirmName(''); }}
+                  >
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </>
+      )}
+
       {/* Shopping categories */}
       <Text style={styles.sectionHeader}>Shopping Categories</Text>
       <View style={styles.card}>
@@ -501,6 +601,10 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   cancelUnitBtn: { flex: 1, padding: 14, borderRadius: 10, alignItems: 'center', backgroundColor: '#f0ebe3' },
   cancelText: { color: '#888', fontSize: 15 },
+  dangerText: { fontSize: 13, color: '#a04036', lineHeight: 19 },
+  deleteUnitBtn: { borderWidth: 1.5, borderColor: '#c0392b', borderRadius: 10, padding: 12, alignItems: 'center', borderStyle: 'dashed' },
+  deleteUnitBtnText: { color: '#c0392b', fontWeight: '700', fontSize: 14 },
+  deleteConfirmBtn: { flex: 1, padding: 14, borderRadius: 10, alignItems: 'center', backgroundColor: '#c0392b' },
   signOut: { marginTop: 32, backgroundColor: '#c0392b', padding: 16, borderRadius: 12, alignItems: 'center' },
   signOutText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

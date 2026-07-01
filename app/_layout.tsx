@@ -1,12 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Stack, router } from 'expo-router';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../src/lib/supabase';
-import { UnitProvider } from '../src/context/UnitContext';
+import { UnitProvider, useUnit } from '../src/context/UnitContext';
 import { useUnits } from '../src/hooks/useUnits';
 
 function RootNavigator({ session }: { session: Session | null }) {
   const { units, loading } = useUnits(session?.user?.id);
+  const { setCurrentUnit } = useUnit();
+  const prevUserId = useRef(session?.user?.id);
+
+  // When the signed-in user changes (sign out / switch account), drop the
+  // previous account's unit immediately so it can't linger in the header while
+  // the new account's units load. The (tabs) layout then picks a valid default.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (uid !== prevUserId.current) {
+      prevUserId.current = uid;
+      setCurrentUnit(null);
+    }
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (loading) return;
