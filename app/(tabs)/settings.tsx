@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, TextInput, Share, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Share, ActivityIndicator,
 } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
@@ -94,8 +94,8 @@ export default function Settings() {
     setSavingName(true);
     const { error } = await supabase.from('profiles').update({ display_name: displayName.trim() }).eq('id', user.id);
     setSavingName(false);
-    if (error) Alert.alert('Error', error.message);
-    else Alert.alert('Saved', 'Display name updated.');
+    if (error) showAlert('Error', error.message);
+    else showAlert('Saved', 'Display name updated.');
   }
 
   async function generateCode() {
@@ -103,7 +103,7 @@ export default function Settings() {
     setGenerating(true);
     const { data: code, error } = await supabase.rpc('generate_invite_code', { p_unit_id: currentUnit.id });
     setGenerating(false);
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) { showAlert('Error', error.message); return; }
     await loadUnitData();
     shareCode(code);
   }
@@ -115,7 +115,7 @@ export default function Settings() {
   }
 
   async function deactivateCode(invite: InviteCode) {
-    Alert.alert('Deactivate Code', `Deactivate code ${invite.code}? It can no longer be used to join.`, [
+    showAlert('Deactivate Code', `Deactivate code ${invite.code}? It can no longer be used to join.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Deactivate', style: 'destructive', onPress: async () => {
@@ -129,7 +129,7 @@ export default function Settings() {
   function changeRole(member: Member, newRole: string) {
     if (member.role === newRole) { setExpandedMemberId(null); return; }
     const isSelf = member.user_id === userId;
-    Alert.alert(
+    showAlert(
       'Change Role',
       `Change ${isSelf ? 'your role' : member.display_name} to ${roleLabel(newRole)}?`,
       [
@@ -143,7 +143,7 @@ export default function Settings() {
               p_role: newRole,
             });
             setSavingRole(false);
-            if (error) { Alert.alert('Error', error.message); return; }
+            if (error) { showAlert('Error', error.message); return; }
             setExpandedMemberId(null);
             await loadUnitData();
             if (isSelf) refetchUnits(); // my own role changed — refresh derived permissions
@@ -155,7 +155,7 @@ export default function Settings() {
 
   async function saveCategoryName(cat: CategoryType) {
     const name = editingCatName.trim();
-    if (!name) { Alert.alert('Name required'); return; }
+    if (!name) { showAlert('Name required'); return; }
     await supabase.rpc('upsert_shopping_category_type', { p_unit_id: currentUnit!.id, p_name: name, p_id: cat.id });
     setEditingCatId(null);
     refetchCategories();
@@ -171,7 +171,7 @@ export default function Settings() {
   }
 
   function confirmDeleteCategory(cat: CategoryType) {
-    Alert.alert('Delete Category', `Delete "${cat.name}"? All tags using this category will be removed.`, [
+    showAlert('Delete Category', `Delete "${cat.name}"? All tags using this category will be removed.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive', onPress: async () => {
@@ -183,7 +183,7 @@ export default function Settings() {
   }
 
   async function saveUnitSettings() {
-    if (!currentUnit || !editName.trim()) { Alert.alert('Name required'); return; }
+    if (!currentUnit || !editName.trim()) { showAlert('Name required'); return; }
     setSavingUnit(true);
     const { error } = await supabase.rpc('update_unit', {
       p_unit_id: currentUnit.id,
@@ -191,7 +191,7 @@ export default function Settings() {
       p_accent_color: editColor,
     });
     setSavingUnit(false);
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) { showAlert('Error', error.message); return; }
     setCurrentUnit({ ...currentUnit, name: editName.trim(), accent_color: editColor });
     setEditingUnit(false);
   }

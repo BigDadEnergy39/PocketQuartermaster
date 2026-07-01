@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Switch } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
@@ -72,8 +73,8 @@ export default function EditItem() {
 
   async function save() {
     const expected = parseInt(expectedQty, 10);
-    if (!itemName.trim()) { Alert.alert('Name required'); return; }
-    if (isNaN(expected) || expected < 1) { Alert.alert('Invalid quantity', 'Expected quantity must be at least 1.'); return; }
+    if (!itemName.trim()) { showAlert('Name required'); return; }
+    if (isNaN(expected) || expected < 1) { showAlert('Invalid quantity', 'Expected quantity must be at least 1.'); return; }
 
     setSaving(true);
     const minVal = minQty.trim() ? parseInt(minQty, 10) : null;
@@ -92,14 +93,14 @@ export default function EditItem() {
     setSaving(false);
 
     if (error) {
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } else {
       router.back();
     }
   }
 
   function confirmRemove() {
-    Alert.alert(
+    showAlert(
       'Remove Item',
       `Remove "${itemName}" from this container? The item and its quantity history are preserved.`,
       [
@@ -114,7 +115,7 @@ export default function EditItem() {
     const { error } = await supabase.rpc('remove_item_from_container', { p_slot_id: slot_id });
     setRemoving(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } else {
       router.dismiss(2);
     }

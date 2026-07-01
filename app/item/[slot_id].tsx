@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, TextInput, Alert,
+  View, Text, TouchableOpacity, StyleSheet, TextInput,
   ScrollView, Modal,
 } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { useLocalSearchParams, router, useNavigation, useFocusEffect } from 'expo-router';
 import ExpirationDatePicker from '../../src/components/ExpirationDatePicker';
 import { supabase } from '../../src/lib/supabase';
@@ -97,7 +98,7 @@ export default function ItemDetail() {
 
   async function updateQty() {
     const qty = parseInt(newQty, 10);
-    if (isNaN(qty) || qty < 0) { Alert.alert('Invalid quantity', 'Enter 0 or a positive number.'); return; }
+    if (isNaN(qty) || qty < 0) { showAlert('Invalid quantity', 'Enter 0 or a positive number.'); return; }
 
     setSaving(true);
     const { error } = await supabase.rpc('record_quantity', {
@@ -108,13 +109,13 @@ export default function ItemDetail() {
     setSaving(false);
 
     if (error) {
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } else {
       setSaved(true);
       // If perishable and no lots recorded yet, offer to add one
       if (item?.items?.is_perishable && lots.length === 0) {
         setTimeout(() => {
-          Alert.alert(
+          showAlert(
             'Add Expiration Date?',
             'This item tracks expiration dates. Want to log a batch now?',
             [
@@ -140,13 +141,13 @@ export default function ItemDetail() {
       p_unit_of_measure: item.items.unit_of_measure,
       p_notes: `From ${item.containers?.name ?? 'container'}`,
     });
-    if (error) { Alert.alert('Error', error.message); return; }
-    Alert.alert('Added', `${item.items.name} added to the shopping list.`);
+    if (error) { showAlert('Error', error.message); return; }
+    showAlert('Added', `${item.items.name} added to the shopping list.`);
   }
 
   async function submitLot() {
     const qty = parseInt(lotQty, 10);
-    if (isNaN(qty) || qty < 1) { Alert.alert('Invalid quantity', 'Enter a positive number.'); return; }
+    if (isNaN(qty) || qty < 1) { showAlert('Invalid quantity', 'Enter a positive number.'); return; }
     setAddingLot(true);
     // Local YYYY-MM-DD — toISOString() would shift the day in timezones behind UTC.
     const dateStr = `${lotDate.getFullYear()}-${String(lotDate.getMonth() + 1).padStart(2, '0')}-${String(lotDate.getDate()).padStart(2, '0')}`;
@@ -156,7 +157,7 @@ export default function ItemDetail() {
       p_quantity: qty,
     });
     setAddingLot(false);
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) { showAlert('Error', error.message); return; }
     setShowAddLot(false);
     setLotQty('1');
     setLotDate(new Date());
@@ -166,7 +167,7 @@ export default function ItemDetail() {
 
   function confirmClearLot(lot: ExpirationLot) {
     const dateStr = new Date(lot.expiration_date).toLocaleDateString();
-    Alert.alert(
+    showAlert(
       'Clear Lot',
       `Mark the "${dateStr}" batch (qty ${lot.quantity}) as used?`,
       [

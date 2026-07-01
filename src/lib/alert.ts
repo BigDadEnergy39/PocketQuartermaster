@@ -31,3 +31,24 @@ export function showAlert(title: string, message?: string, buttons?: AlertButton
     cancelBtn?.onPress?.();
   }
 }
+
+// Web-aware single-field text prompt. Alert.prompt is iOS-only, so this maps to
+// window.prompt on web. Android has no native text prompt, so it proceeds with
+// the supplied default value rather than failing silently.
+export function showPrompt(
+  title: string,
+  message: string,
+  onSubmit: (value: string) => void,
+  defaultValue = '',
+) {
+  if (Platform.OS === 'web') {
+    const result = window.prompt([title, message].filter(Boolean).join('\n\n'), defaultValue);
+    if (result !== null && result.trim()) onSubmit(result);
+    return;
+  }
+  if (Platform.OS === 'ios') {
+    Alert.prompt(title, message, onSubmit, 'plain-text', defaultValue);
+    return;
+  }
+  onSubmit(defaultValue);
+}

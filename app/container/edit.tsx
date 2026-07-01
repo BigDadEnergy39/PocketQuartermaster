@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { showAlert, showPrompt } from '../../src/lib/alert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
@@ -47,7 +48,7 @@ export default function EditContainer() {
   }, [id]);
 
   async function save() {
-    if (!name.trim()) { Alert.alert('Name required'); return; }
+    if (!name.trim()) { showAlert('Name required'); return; }
     setSaving(true);
     const { error } = await supabase.rpc('edit_container', {
       p_container_id: id,
@@ -58,17 +59,17 @@ export default function EditContainer() {
     });
     setSaving(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } else {
       router.back();
     }
   }
 
   function confirmDuplicate() {
-    Alert.prompt(
+    showPrompt(
       'Duplicate Container',
       'Name for the new container:',
-      async (newName) => {
+      async (newName: string) => {
         if (!newName?.trim()) return;
         setDuplicating(true);
         const { data: newId, error } = await supabase.rpc('duplicate_container', {
@@ -76,16 +77,15 @@ export default function EditContainer() {
           p_new_name: newName.trim(),
         });
         setDuplicating(false);
-        if (error) { Alert.alert('Error', error.message); return; }
+        if (error) { showAlert('Error', error.message); return; }
         router.replace(`/container/${newId}`);
       },
-      'plain-text',
       `${name} (copy)`,
     );
   }
 
   function confirmDelete() {
-    Alert.alert(
+    showAlert(
       'Delete Container',
       `Remove "${name}"? The container and its item list will be archived. Quantity history is preserved.`,
       [
@@ -100,7 +100,7 @@ export default function EditContainer() {
     const { error } = await supabase.rpc('delete_container', { p_container_id: id });
     setDeleting(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } else {
       router.replace('/(tabs)');
     }

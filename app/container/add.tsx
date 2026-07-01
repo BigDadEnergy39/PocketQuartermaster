@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
@@ -25,7 +26,7 @@ export default function AddContainer() {
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (!name.trim()) { Alert.alert('Name required', 'Please give this container a name.'); return; }
+    if (!name.trim()) { showAlert('Name required', 'Please give this container a name.'); return; }
     if (!currentUnit) return;
 
     setSaving(true);
@@ -39,7 +40,7 @@ export default function AddContainer() {
 
     setSaving(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } else {
       router.back();
     }

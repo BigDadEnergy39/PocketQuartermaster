@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { showAlert } from '../src/lib/alert';
 import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
 import { ColorPicker, UNIT_COLORS } from '../src/components/ColorPicker';
@@ -11,7 +12,7 @@ export default function CreateUnit() {
 
   async function handleCreate() {
     if (!name.trim()) {
-      Alert.alert('Unit name required');
+      showAlert('Unit name required');
       return;
     }
     setLoading(true);
@@ -22,7 +23,7 @@ export default function CreateUnit() {
     });
 
     if (error || data?.error) {
-      Alert.alert('Error', data?.error ?? error?.message ?? 'Could not create unit');
+      showAlert('Error', data?.error ?? error?.message ?? 'Could not create unit');
       setLoading(false);
       return;
     }

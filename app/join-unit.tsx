@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { showAlert } from '../src/lib/alert';
 import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
 
@@ -9,7 +10,7 @@ export default function JoinUnit() {
 
   async function handleJoin() {
     if (!code.trim()) {
-      Alert.alert('Please enter an invite code');
+      showAlert('Please enter an invite code');
       return;
     }
     setLoading(true);
@@ -21,11 +22,11 @@ export default function JoinUnit() {
     setLoading(false);
 
     if (error || data?.error) {
-      Alert.alert('Could not join', data?.error ?? error?.message);
+      showAlert('Could not join', data?.error ?? error?.message);
       return;
     }
 
-    Alert.alert('Welcome!', `You've joined ${data.unit_name}.`, [
+    showAlert('Welcome!', `You've joined ${data.unit_name}.`, [
       { text: 'Let\'s go', onPress: () => router.replace('/(tabs)') },
     ]);
   }

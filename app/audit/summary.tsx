@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../src/lib/supabase';
@@ -81,7 +82,7 @@ export default function AuditSummary() {
       });
     }
     setAddingAll(false);
-    Alert.alert('Added to Shopping List', `${needRestock.length} item${needRestock.length !== 1 ? 's' : ''} added.`);
+    showAlert('Added to Shopping List', `${needRestock.length} item${needRestock.length !== 1 ? 's' : ''} added.`);
   }
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={accent} /></View>;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
@@ -67,9 +68,9 @@ export default function AddItem() {
   }
 
   async function save() {
-    if (!itemName.trim()) { Alert.alert('Name required'); return; }
+    if (!itemName.trim()) { showAlert('Name required'); return; }
     const expected = parseInt(expectedQty, 10);
-    if (isNaN(expected) || expected < 1) { Alert.alert('Invalid quantity', 'Expected quantity must be at least 1.'); return; }
+    if (isNaN(expected) || expected < 1) { showAlert('Invalid quantity', 'Expected quantity must be at least 1.'); return; }
     if (!container_id || !currentUnit) return;
 
     setSaving(true);
@@ -88,7 +89,7 @@ export default function AddItem() {
 
     setSaving(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } else {
       router.back();
     }

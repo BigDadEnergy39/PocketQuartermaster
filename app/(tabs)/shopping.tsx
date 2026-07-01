@@ -1,8 +1,9 @@
 import { useCallback, useState, useMemo } from 'react';
 import {
   View, Text, SectionList, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, TextInput, Modal, ScrollView,
+  ActivityIndicator, TextInput, Modal, ScrollView,
 } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../src/lib/supabase';
@@ -61,11 +62,11 @@ function EditSheet({ item, categoryTypes, tagValues, accent, unitId, onClose, on
   const isNew = !item;
 
   async function save() {
-    if (!name.trim()) { Alert.alert('Name required'); return; }
+    if (!name.trim()) { showAlert('Name required'); return; }
     const qtyNum = parseInt(qty, 10);
-    if (isNaN(qtyNum) || qtyNum < 1) { Alert.alert('Invalid quantity'); return; }
+    if (isNaN(qtyNum) || qtyNum < 1) { showAlert('Invalid quantity'); return; }
     const priceNum = price.trim() ? parseFloat(price) : null;
-    if (price.trim() && (isNaN(priceNum!) || priceNum! < 0)) { Alert.alert('Invalid price'); return; }
+    if (price.trim() && (isNaN(priceNum!) || priceNum! < 0)) { showAlert('Invalid price'); return; }
 
     setSaving(true);
     let itemId = item?.id;
@@ -79,7 +80,7 @@ function EditSheet({ item, categoryTypes, tagValues, accent, unitId, onClose, on
         p_notes: notes.trim() || null,
         p_unit_price: priceNum,
       });
-      if (error) { Alert.alert('Error', error.message); setSaving(false); return; }
+      if (error) { showAlert('Error', error.message); setSaving(false); return; }
       itemId = data as string;
     } else {
       const { error } = await supabase.rpc('update_shopping_item', {
@@ -90,7 +91,7 @@ function EditSheet({ item, categoryTypes, tagValues, accent, unitId, onClose, on
         p_notes: notes.trim() || null,
         p_unit_price: priceNum,
       });
-      if (error) { Alert.alert('Error', error.message); setSaving(false); return; }
+      if (error) { showAlert('Error', error.message); setSaving(false); return; }
     }
 
     // Save / remove tags
@@ -115,7 +116,7 @@ function EditSheet({ item, categoryTypes, tagValues, accent, unitId, onClose, on
   }
 
   async function removeItem() {
-    Alert.alert('Remove Item', `Remove "${item!.item_name}" from the list?`, [
+    showAlert('Remove Item', `Remove "${item!.item_name}" from the list?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove', style: 'destructive', onPress: async () => {
@@ -345,7 +346,7 @@ export default function Shopping() {
   }
 
   async function clearPurchased() {
-    Alert.alert('Clear Purchased', 'Remove all checked-off items from the list?', [
+    showAlert('Clear Purchased', 'Remove all checked-off items from the list?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Clear', style: 'destructive', onPress: async () => {

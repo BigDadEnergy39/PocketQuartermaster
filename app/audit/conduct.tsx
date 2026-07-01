@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, SectionList, TouchableOpacity, StyleSheet,
-  TextInput, Alert, ActivityIndicator,
+  TextInput, ActivityIndicator,
 } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
@@ -112,7 +113,7 @@ export default function AuditConduct() {
   async function finish() {
     const unchecked = checks.filter(c => c.state === 'unchecked');
     if (unchecked.length > 0) {
-      Alert.alert(
+      showAlert(
         `${unchecked.length} item${unchecked.length !== 1 ? 's' : ''} not counted`,
         'Uncounted items will be skipped in the summary. Continue?',
         [

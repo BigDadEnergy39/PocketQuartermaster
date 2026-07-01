@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
@@ -52,11 +53,11 @@ export default function AuditStart() {
 
   async function startAudit() {
     if (!currentUnit) return;
-    if (items.length === 0) { Alert.alert('No items', 'Add items to containers before running an audit.'); return; }
+    if (items.length === 0) { showAlert('No items', 'Add items to containers before running an audit.'); return; }
     setStarting(true);
     const { data: auditId, error } = await supabase.rpc('start_audit', { p_unit_id: currentUnit.id });
     setStarting(false);
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) { showAlert('Error', error.message); return; }
     router.push(`/audit/conduct?audit_id=${auditId}`);
   }
 

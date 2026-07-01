@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  TextInput, Alert, ActivityIndicator, Modal, ScrollView,
+  TextInput, ActivityIndicator, Modal, ScrollView,
 } from 'react-native';
+import { showAlert } from '../../src/lib/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
@@ -116,7 +117,7 @@ export default function ContainerCheck() {
     setSaving(false);
 
     if (errors.length > 0) {
-      Alert.alert('Some items failed to save', errors.join('\n'));
+      showAlert('Some items failed to save', errors.join('\n'));
       return;
     }
 
@@ -139,9 +140,9 @@ export default function ContainerCheck() {
       if (error) errors.push(`${c.item_name}: ${error.message}`);
     }
     if (errors.length) {
-      Alert.alert('Some items failed', errors.join('\n'));
+      showAlert('Some items failed', errors.join('\n'));
     } else {
-      Alert.alert('Added', `${toAdd.length} item${toAdd.length !== 1 ? 's' : ''} added to the shopping list.`, [
+      showAlert('Added', `${toAdd.length} item${toAdd.length !== 1 ? 's' : ''} added to the shopping list.`, [
         { text: 'OK', onPress: () => { setShowSummary(false); router.back(); } },
       ]);
     }
