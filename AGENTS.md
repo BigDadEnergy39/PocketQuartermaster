@@ -36,9 +36,20 @@ migrations describe the schema that commit's code expects, so a fresh
 - **Never** paste DDL/DML into the Supabase SQL Editor for schema changes — that
   silently drifts the live DB from the repo. (This caused real bugs here: tables
   live without RLS, a policy changed out-of-band.)
-- **New change:** `supabase migration new <name>` → edit the generated
-  `supabase/migrations/<timestamp>_<name>.sql` → `supabase db push` to apply it to
-  the linked project (which records it in the remote migration ledger).
+- **Develop locally, push only on merge.** `db push` applies straight to the one
+  shared linked project immediately, with no concept of git branches — so a
+  half-finished migration pushed from one feature branch is live for every other
+  branch/worktree too. Default flow: `supabase start` (local Docker Postgres +
+  API) → `supabase migration new <name>` → edit the generated
+  `supabase/migrations/<timestamp>_<name>.sql` → `supabase db reset` (replays all
+  migrations into the local DB; iterate freely) → build/test against the local
+  stack → only once the feature is ready to merge to `main`, `supabase db push`
+  to apply it to the linked project (records it in the remote migration ledger).
+- **Parallel worktrees share one local Supabase stack**, not one each — the
+  Docker container names/ports are derived from the tracked `project_id` in
+  `config.toml`, identical in every worktree. Run one local stack at a time:
+  `supabase stop` in the worktree you're leaving before `supabase start` in the
+  one you're switching to.
 - **Inspect / sync:** `supabase migration list` shows local-vs-remote; if the DB
   ever drifts, `supabase db pull` captures the live schema as a migration.
 - The `001`–`024` files predate CLI adoption; they were **baselined** as
