@@ -25,6 +25,14 @@ logged-in users. Follow these rules without exception:
 5. **Client uses the anon key only.** The `service_role` key must never appear in
    the app, `.env*`, or EAS env. Secrets stay out of git (`.env*.local`,
    `gradle.properties`, `*.keystore` are gitignored).
+6. **Changing an existing RPC's argument list?** `drop function if exists
+   old_name(old_arg_types...);` before `create or replace function`. Postgres
+   identifies a function by name *and* argument types — `create or replace`
+   only replaces a function with the exact same signature. Adding a new
+   parameter (even with a `default`) creates a second, coexisting overload
+   instead of replacing the original, and calls that match both by argument
+   count become ambiguous ("could not choose the best candidate function").
+   Hit this twice on 2026-07-02 (`duplicate_container` and `add_container`).
 
 # Migration Workflow (Supabase CLI)
 
