@@ -19,7 +19,7 @@ function UnitHeader() {
 }
 
 export default function TabLayout() {
-  const { currentUnit, setCurrentUnit } = useUnit();
+  const { currentUnit, setCurrentUnit, restoredUnitId, isRestored } = useUnit();
   const [userId, setUserId] = useState<string | undefined>();
   const { units } = useUnits(userId);
 
@@ -28,14 +28,15 @@ export default function TabLayout() {
   }, []);
 
   useEffect(() => {
-    if (units.length === 0) return;
-    // Pick a default when none is selected, AND correct a stale selection that
-    // isn't in *this* user's units — e.g. after switching accounts, the previous
-    // account's unit lingers in context and must not keep showing in the header.
-    if (!currentUnit || !units.some(u => u.id === currentUnit.id)) {
-      setCurrentUnit(units[0]);
-    }
-  }, [units, currentUnit]);
+    if (units.length === 0 || !isRestored) return;
+    // Keep a selection that's still valid for *this* user's units. Otherwise
+    // pick a default: prefer the unit persisted from the last session (so a
+    // page reload / app relaunch doesn't silently switch units on a
+    // multi-unit Quartermaster), falling back to the first unit.
+    if (currentUnit && units.some(u => u.id === currentUnit.id)) return;
+    const preferred = units.find(u => u.id === restoredUnitId) ?? units[0];
+    setCurrentUnit(preferred);
+  }, [units, currentUnit, restoredUnitId, isRestored]);
 
   const color = currentUnit?.accent_color ?? '#2d5a27';
 
