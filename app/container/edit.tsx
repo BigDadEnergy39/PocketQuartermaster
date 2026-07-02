@@ -28,12 +28,16 @@ export default function EditContainer() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [groupName, setGroupName] = useState<string | null>(null);
+  const [groupSiblingCount, setGroupSiblingCount] = useState(0);
+  const [diverging, setDiverging] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     supabase
       .from('containers')
-      .select('name, type, purpose, notes')
+      .select('name, type, purpose, notes, group_id, container_groups(name)')
       .eq('id', id)
       .single()
       .then(({ data }) => {
@@ -42,10 +46,22 @@ export default function EditContainer() {
           setType(data.type as any);
           setPurpose(data.purpose as any);
           setNotes(data.notes ?? '');
+          setGroupId(data.group_id);
+          setGroupName((data as any).container_groups?.name ?? null);
         }
         setLoaded(true);
       });
   }, [id]);
+
+  useEffect(() => {
+    if (!groupId) { setGroupSiblingCount(0); return; }
+    supabase
+      .from('containers')
+      .select('id', { count: 'exact', head: true })
+      .eq('group_id', groupId)
+      .eq('is_archived', false)
+      .then(({ count }) => setGroupSiblingCount(Math.max((count ?? 1) - 1, 0)));
+  }, [groupId]);
 
   async function save() {
     if (!name.trim()) { showAlert('Name required'); return; }
@@ -82,6 +98,47 @@ export default function EditContainer() {
       },
       `${name} (copy)`,
     );
+  }
+
+  function confirmDuplicateLinked() {
+    showPrompt(
+      'Duplicate & Link',
+      'Name for the new linked container:',
+      async (newName: string) => {
+        if (!newName?.trim()) return;
+        setDuplicating(true);
+        const { data: newId, error } = await supabase.rpc('duplicate_container', {
+          p_container_id: id,
+          p_new_name: newName.trim(),
+          p_keep_linked: true,
+        });
+        setDuplicating(false);
+        if (error) { showAlert('Error', error.message); return; }
+        router.replace(`/container/${newId}`);
+      },
+      `${name} (copy)`,
+    );
+  }
+
+  function confirmDiverge() {
+    showAlert(
+      'Diverge from Linked Set',
+      `"${name}" will become independent. Its current contents stay exactly as they are, but it will no longer receive changes made to the rest of "${groupName}".`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Diverge', style: 'destructive', onPress: doDiverge },
+      ]
+    );
+  }
+
+  async function doDiverge() {
+    setDiverging(true);
+    const { error } = await supabase.rpc('diverge_container', { p_container_id: id });
+    setDiverging(false);
+    if (error) { showAlert('Error', error.message); return; }
+    setGroupId(null);
+    setGroupName(null);
+    setGroupSiblingCount(0);
   }
 
   function confirmDelete() {
@@ -176,6 +233,41 @@ export default function EditContainer() {
       </TouchableOpacity>
 
       <TouchableOpacity
+        style={[styles.duplicateBtn, duplicating && styles.disabled]}
+        onPress={confirmDuplicateLinked}
+        disabled={duplicating}
+      >
+        <Text style={styles.duplicateBtnText}>{duplicating ? 'Duplicating…' : '⧉🔗 Duplicate & Link'}</Text>
+      </TouchableOpacity>
+
+      {groupId ? (
+        <>
+          <TouchableOpacity
+            style={styles.linkInfoBtn}
+            onPress={() => router.push(`/container/group?id=${groupId}`)}
+          >
+            <Text style={styles.linkInfoBtnText}>
+              🔗 Linked to {groupSiblingCount} other{groupSiblingCount === 1 ? '' : 's'} ({groupName}) · Manage
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.divergeBtn, diverging && styles.disabled]}
+            onPress={confirmDiverge}
+            disabled={diverging}
+          >
+            <Text style={styles.divergeBtnText}>{diverging ? 'Diverging…' : '✂️ Diverge from Linked Set'}</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <TouchableOpacity
+          style={styles.linkInfoBtn}
+          onPress={() => router.push(`/container/link?source_id=${id}`)}
+        >
+          <Text style={styles.linkInfoBtnText}>🔗 Link to Existing Container…</Text>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
         style={[styles.deleteBtn, deleting && styles.disabled]}
         onPress={confirmDelete}
         disabled={deleting}
@@ -228,6 +320,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: '#1a5276',
   },
   duplicateBtnText: { color: '#1a5276', fontSize: 15, fontWeight: '600' },
+  linkInfoBtn: {
+    padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 12,
+    backgroundColor: '#eef4fb',
+  },
+  linkInfoBtnText: { color: '#1a5276', fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  divergeBtn: {
+    padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 12,
+    borderWidth: 1.5, borderColor: '#e67e22',
+  },
+  divergeBtnText: { color: '#e67e22', fontSize: 15, fontWeight: '600' },
   deleteBtn: {
     padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 12,
     borderWidth: 1.5, borderColor: '#c0392b',
