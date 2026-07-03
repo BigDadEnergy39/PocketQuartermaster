@@ -8,6 +8,7 @@ export interface ContainerSummary {
   purpose: string;
   notes: string | null;
   item_count: number;
+  subcontainer_count: number;
 }
 
 export function useContainers(unitId: string | undefined) {
