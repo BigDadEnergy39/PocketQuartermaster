@@ -10,6 +10,7 @@ export interface ContainerSummary {
   item_count: number;
   group_id: string | null;
   group_name: string | null;
+  subcontainer_count: number;
 }
 
 export function useContainers(unitId: string | undefined) {

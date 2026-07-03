@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { showAlert } from '../../src/lib/alert';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
 
@@ -19,11 +19,18 @@ const TYPE_LABEL: Record<string, string> = {
 
 export default function AddContainer() {
   const { currentUnit } = useUnit();
+  const { parent_id } = useLocalSearchParams<{ parent_id?: string }>();
+  const isSubcontainer = !!parent_id;
+  const navigation = useNavigation();
   const [name, setName] = useState('');
   const [type, setType] = useState<typeof CONTAINER_TYPES[number]>('tote');
   const [purpose, setPurpose] = useState<typeof CONTAINER_PURPOSES[number]>('both');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isSubcontainer) navigation.setOptions({ title: 'Add Subcontainer' });
+  }, [isSubcontainer]);
 
   async function save() {
     if (!name.trim()) { showAlert('Name required', 'Please give this container a name.'); return; }
@@ -36,6 +43,7 @@ export default function AddContainer() {
       p_type: type,
       p_purpose: purpose,
       p_notes: notes.trim() || null,
+      p_parent_container_id: parent_id ?? null,
     });
 
     setSaving(false);
@@ -48,12 +56,12 @@ export default function AddContainer() {
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-      <Text style={styles.label}>Container Name</Text>
+      <Text style={styles.label}>{isSubcontainer ? 'Subcontainer Name' : 'Container Name'}</Text>
       <TextInput
         style={styles.input}
         value={name}
         onChangeText={setName}
-        placeholder="e.g. Kitchen Tote #1"
+        placeholder={isSubcontainer ? 'e.g. Tool Kit' : 'e.g. Kitchen Tote #1'}
         placeholderTextColor="#aaa"
       />
 
@@ -104,7 +112,7 @@ export default function AddContainer() {
         onPress={save}
         disabled={saving}
       >
-        <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Add Container'}</Text>
+        <Text style={styles.saveBtnText}>{saving ? 'Saving…' : isSubcontainer ? 'Add Subcontainer' : 'Add Container'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>

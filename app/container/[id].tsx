@@ -3,8 +3,14 @@ import { View, Text, SectionList, FlatList, TouchableOpacity, StyleSheet, Activi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useNavigation, useFocusEffect } from 'expo-router';
 import { useContainerItems, SlotWithItem } from '../../src/hooks/useContainerItems';
+import { useSubcontainers, SubcontainerSummary } from '../../src/hooks/useSubcontainers';
 import { useUnit } from '../../src/context/UnitContext';
 import { supabase } from '../../src/lib/supabase';
+import { showAlert, showPrompt } from '../../src/lib/alert';
+
+const TYPE_EMOJI: Record<string, string> = {
+  tote: '📦', shelf: '🗄️', stuff_sack: '🎒', compartment: '🗃️', cooler: '🧊', bag: '👜', other: '📫',
+};
 
 function statusColor(current: number | null, expected: number, min: number | null): string {
   if (current === null) return '#aaa';
@@ -43,19 +49,118 @@ function ItemCard({ item }: { item: SlotWithItem }) {
   );
 }
 
+function SubcontainerCard({
+  sub, expanded, onToggle, onChanged,
+}: {
+  sub: SubcontainerSummary;
+  expanded: boolean;
+  onToggle: () => void;
+  onChanged: () => void;
+}) {
+  const { items, loading, refetch } = useContainerItems(expanded ? sub.id : undefined);
+
+  useEffect(() => { if (expanded) refetch(); }, [expanded]);
+
+  function rename() {
+    showPrompt(
+      'Rename Subcontainer',
+      'New name:',
+      async (newName: string) => {
+        if (!newName?.trim()) return;
+        const { error } = await supabase.rpc('edit_container', {
+          p_container_id: sub.id,
+          p_name: newName.trim(),
+          p_type: sub.type,
+          p_purpose: sub.purpose,
+          p_notes: sub.notes,
+        });
+        if (error) { showAlert('Error', error.message); return; }
+        onChanged();
+      },
+      sub.name,
+    );
+  }
+
+  function confirmDelete() {
+    showAlert(
+      'Delete Subcontainer',
+      `Remove "${sub.name}"? Its item list will be archived. Quantity history is preserved.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive', onPress: async () => {
+            const { error } = await supabase.rpc('delete_container', { p_container_id: sub.id });
+            if (error) { showAlert('Error', error.message); return; }
+            onChanged();
+          },
+        },
+      ]
+    );
+  }
+
+  return (
+    <View style={styles.subCard}>
+      <TouchableOpacity style={styles.subCardHeader} onPress={onToggle} activeOpacity={0.7}>
+        <Text style={styles.subCardEmoji}>{TYPE_EMOJI[sub.type] ?? '📫'}</Text>
+        <View style={styles.subCardBody}>
+          <Text style={styles.subCardName}>{sub.name}</Text>
+          <Text style={styles.subCardMeta}>{sub.item_count} {sub.item_count === 1 ? 'item' : 'items'}</Text>
+        </View>
+        <TouchableOpacity onPress={rename} hitSlop={8} style={styles.subCardAction}>
+          <Text style={styles.subCardActionText}>✏️</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={confirmDelete} hitSlop={8} style={styles.subCardAction}>
+          <Text style={styles.subCardActionText}>🗑</Text>
+        </TouchableOpacity>
+        <Text style={styles.subCardArrow}>{expanded ? '︿' : '﹀'}</Text>
+      </TouchableOpacity>
+
+      {expanded && (
+        <View style={styles.subCardContent}>
+          {loading ? (
+            <ActivityIndicator style={{ paddingVertical: 12 }} />
+          ) : items.length === 0 ? (
+            <Text style={styles.subCardEmpty}>No items yet.</Text>
+          ) : (
+            [...items]
+              .sort((a, b) => a.item_name.localeCompare(b.item_name))
+              .map(item => <ItemCard key={item.slot_id} item={item} />)
+          )}
+          <TouchableOpacity
+            style={styles.subCardAddItem}
+            onPress={() => router.push(`/item/add?container_id=${sub.id}`)}
+          >
+            <Text style={styles.subCardAddItemText}>+ Add Item</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function ContainerDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUnit } = useUnit();
   const { items, loading, refetch } = useContainerItems(id);
+  const { subcontainers, refetch: refetchSubcontainers } = useSubcontainers(id);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const [groupByCategory, setGroupByCategory] = useState(false);
   const [containerName, setContainerName] = useState('Container');
   const [linkedGroupName, setLinkedGroupName] = useState<string | null>(null);
+  const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
 
   const accent = currentUnit?.accent_color ?? '#2d5a27';
 
-  useFocusEffect(useCallback(() => { refetch(); }, [id]));
+  useFocusEffect(useCallback(() => { refetch(); refetchSubcontainers(); }, [id]));
+
+  function toggleSub(subId: string) {
+    setExpandedSubs(prev => {
+      const next = new Set(prev);
+      if (next.has(subId)) next.delete(subId); else next.add(subId);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -126,6 +231,26 @@ export default function ContainerDetail() {
     </TouchableOpacity>
   );
 
+  const subcontainersSection = (
+    <View style={styles.subSection}>
+      <View style={styles.subSectionHeader}>
+        <Text style={styles.subSectionTitle}>Subcontainers</Text>
+        <TouchableOpacity onPress={() => router.push(`/container/add?parent_id=${id}`)}>
+          <Text style={[styles.subSectionAdd, { color: accent }]}>+ Add Subcontainer</Text>
+        </TouchableOpacity>
+      </View>
+      {subcontainers.map(sub => (
+        <SubcontainerCard
+          key={sub.id}
+          sub={sub}
+          expanded={expandedSubs.has(sub.id)}
+          onToggle={() => toggleSub(sub.id)}
+          onChanged={() => { refetchSubcontainers(); }}
+        />
+      ))}
+    </View>
+  );
+
   const toggleBar = hasCategories ? (
     <View style={styles.toggleBar}>
       <TouchableOpacity
@@ -159,6 +284,7 @@ export default function ContainerDetail() {
           keyExtractor={s => s.slot_id}
           contentContainerStyle={[styles.list, { paddingBottom: 100 + insets.bottom }]}
           ListHeaderComponent={toggleBar}
+          ListFooterComponent={subcontainersSection}
           ListEmptyComponent={emptyComponent}
           renderSectionHeader={({ section }) => (
             <View style={styles.sectionHeader}>
@@ -175,6 +301,7 @@ export default function ContainerDetail() {
           keyExtractor={s => s.slot_id}
           contentContainerStyle={[styles.list, { paddingBottom: 100 + insets.bottom }]}
           ListHeaderComponent={toggleBar}
+          ListFooterComponent={subcontainersSection}
           ListEmptyComponent={emptyComponent}
           renderItem={({ item }) => <ItemCard item={item} />}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
@@ -232,4 +359,37 @@ const styles = StyleSheet.create({
     alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, elevation: 4,
   },
   fabText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  subSection: { marginTop: 24, paddingBottom: 8 },
+  subSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10,
+  },
+  subSectionTitle: {
+    fontSize: 12, fontWeight: '800', color: '#888',
+    textTransform: 'uppercase', letterSpacing: 0.8,
+  },
+  subSectionAdd: { fontSize: 13, fontWeight: '700' },
+  subCard: {
+    backgroundColor: '#fff', borderRadius: 12, marginBottom: 10,
+    borderWidth: 1, borderColor: '#e0d8cc', overflow: 'hidden',
+  },
+  subCardHeader: {
+    flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10,
+  },
+  subCardEmoji: { fontSize: 22 },
+  subCardBody: { flex: 1 },
+  subCardName: { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
+  subCardMeta: { fontSize: 12, color: '#888', marginTop: 2 },
+  subCardAction: { paddingHorizontal: 4 },
+  subCardActionText: { fontSize: 16 },
+  subCardArrow: { fontSize: 14, color: '#aaa', marginLeft: 2 },
+  subCardContent: {
+    paddingHorizontal: 14, paddingBottom: 14, gap: 8,
+    borderTopWidth: 1, borderTopColor: '#f0ebe3',
+  },
+  subCardEmpty: { fontSize: 13, color: '#aaa', paddingVertical: 12, textAlign: 'center' },
+  subCardAddItem: {
+    padding: 10, borderRadius: 10, alignItems: 'center', marginTop: 4,
+    borderWidth: 1.5, borderColor: '#e0d8cc', borderStyle: 'dashed',
+  },
+  subCardAddItemText: { fontSize: 13, fontWeight: '700', color: '#666' },
 });

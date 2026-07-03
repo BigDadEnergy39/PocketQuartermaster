@@ -20,7 +20,8 @@ export function useUnits(userId: string | undefined) {
     const { data, error } = await supabase
       .from('unit_members')
       .select('role, units(*)')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .order('name', { referencedTable: 'units' });
 
     if (!error && data) {
       const mapped: UnitWithRole[] = data.map((row: any) => ({
