@@ -59,12 +59,13 @@ export default function ContainerDetail() {
 
   useEffect(() => {
     if (!id) return;
-    supabase.from('containers').select('name, container_groups(name)').eq('id', id).single()
+    supabase.from('containers').select('name, group_id').eq('id', id).single()
       .then(({ data }) => {
-        if (data) {
-          setContainerName(data.name);
-          setLinkedGroupName((data as any).container_groups?.name ?? null);
-        }
+        if (!data) return;
+        setContainerName(data.name);
+        if (!data.group_id) { setLinkedGroupName(null); return; }
+        supabase.from('container_groups').select('name').eq('id', data.group_id).single()
+          .then(({ data: g }) => setLinkedGroupName(g?.name ?? null));
       });
   }, [id]);
 

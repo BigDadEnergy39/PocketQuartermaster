@@ -37,19 +37,20 @@ export default function EditContainer() {
     if (!id) return;
     supabase
       .from('containers')
-      .select('name, type, purpose, notes, group_id, container_groups(name)')
+      .select('name, type, purpose, notes, group_id')
       .eq('id', id)
       .single()
       .then(({ data }) => {
-        if (data) {
-          setName(data.name);
-          setType(data.type as any);
-          setPurpose(data.purpose as any);
-          setNotes(data.notes ?? '');
-          setGroupId(data.group_id);
-          setGroupName((data as any).container_groups?.name ?? null);
-        }
+        if (!data) { setLoaded(true); return; }
+        setName(data.name);
+        setType(data.type as any);
+        setPurpose(data.purpose as any);
+        setNotes(data.notes ?? '');
+        setGroupId(data.group_id);
         setLoaded(true);
+        if (!data.group_id) { setGroupName(null); return; }
+        supabase.from('container_groups').select('name').eq('id', data.group_id).single()
+          .then(({ data: g }) => setGroupName(g?.name ?? null));
       });
   }, [id]);
 
