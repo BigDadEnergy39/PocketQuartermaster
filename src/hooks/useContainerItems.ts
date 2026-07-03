@@ -31,3 +31,27 @@ export function useContainerItems(containerId: string | undefined) {
 
   return { items, loading, refetch: fetchItems };
 }
+
+export interface CheckSlotWithItem extends SlotWithItem {
+  subcontainer_id: string | null;
+  subcontainer_name: string | null;
+}
+
+export function useContainerCheckItems(containerId: string | undefined) {
+  const [items, setItems] = useState<CheckSlotWithItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!containerId) { setLoading(false); return; }
+    fetchItems();
+  }, [containerId]);
+
+  async function fetchItems() {
+    setLoading(true);
+    const { data, error } = await supabase.rpc('get_container_check_items', { p_container_id: containerId });
+    if (!error && data) setItems(data);
+    setLoading(false);
+  }
+
+  return { items, loading, refetch: fetchItems };
+}

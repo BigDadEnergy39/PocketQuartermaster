@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  View, Text, SectionList, TouchableOpacity, StyleSheet,
   TextInput, ActivityIndicator, Modal, ScrollView,
 } from 'react-native';
 import { showAlert } from '../../src/lib/alert';
@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
-import { useContainerItems, SlotWithItem } from '../../src/hooks/useContainerItems';
+import { useContainerCheckItems } from '../../src/hooks/useContainerItems';
 
 type CheckState = 'unchecked' | 'checked' | 'adjusted';
 
@@ -18,6 +18,7 @@ interface ItemCheck {
   expected_quantity: number;
   unit_of_measure: string;
   min_quantity: number | null;
+  subcontainer_name: string | null;
   state: CheckState;
   quantity: number;   // what we'll record
   editing: boolean;
@@ -26,7 +27,7 @@ interface ItemCheck {
 export default function ContainerCheck() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUnit } = useUnit();
-  const { items, loading } = useContainerItems(id);
+  const { items, loading } = useContainerCheckItems(id);
   const insets = useSafeAreaInsets();
 
   const [checks, setChecks] = useState<ItemCheck[]>([]);
@@ -48,6 +49,7 @@ export default function ContainerCheck() {
             expected_quantity: i.expected_quantity,
             unit_of_measure: i.unit_of_measure,
             min_quantity: i.min_quantity,
+            subcontainer_name: i.subcontainer_name,
             state: 'unchecked',
             quantity: i.expected_quantity,
             editing: false,
@@ -55,6 +57,23 @@ export default function ContainerCheck() {
       );
     }
   }, [items]);
+
+  // Group into sections: the container's own items first (no header), then
+  // one section per subcontainer, so Contents Check flattens the whole tree
+  // into a single continuous walkthrough.
+  const sections = useMemo(() => {
+    const ownItems = checks.filter(c => !c.subcontainer_name);
+    const bySub: Record<string, ItemCheck[]> = {};
+    checks.forEach(c => {
+      if (!c.subcontainer_name) return;
+      if (!bySub[c.subcontainer_name]) bySub[c.subcontainer_name] = [];
+      bySub[c.subcontainer_name].push(c);
+    });
+    const result: { title: string | null; data: ItemCheck[] }[] = [];
+    if (ownItems.length > 0) result.push({ title: null, data: ownItems });
+    Object.keys(bySub).sort().forEach(name => result.push({ title: name, data: bySub[name] }));
+    return result;
+  }, [checks]);
 
   function tapItem(slot_id: string) {
     setChecks(prev => prev.map(c => {
@@ -172,11 +191,19 @@ export default function ContainerCheck() {
         </View>
         <Text style={styles.progressLabel}>{checkedCount} of {total} checked</Text>
 
-        <FlatList
-          data={checks}
+        <SectionList
+          sections={sections}
           keyExtractor={c => c.slot_id}
           contentContainerStyle={[styles.list, { paddingBottom: 120 + insets.bottom }]}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          SectionSeparatorComponent={() => <View style={{ height: 4 }} />}
+          renderSectionHeader={({ section }) => (
+            section.title ? (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>🧰 {section.title}</Text>
+              </View>
+            ) : null
+          )}
           renderItem={({ item: c }) => {
             const isChecked = c.state !== 'unchecked';
             const color = c.state === 'unchecked' ? '#aaa' : c.state === 'adjusted' ? '#e67e22' : accent;
@@ -321,6 +348,11 @@ const styles = StyleSheet.create({
   progressFill: { height: 4 },
   progressLabel: { textAlign: 'right', fontSize: 12, color: '#aaa', paddingRight: 16, paddingTop: 6, paddingBottom: 4 },
   list: { padding: 16 },
+  sectionHeader: { paddingVertical: 6, paddingHorizontal: 4, marginTop: 4 },
+  sectionHeaderText: {
+    fontSize: 12, fontWeight: '800', color: '#888',
+    textTransform: 'uppercase', letterSpacing: 0.8,
+  },
   card: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
     borderRadius: 12, padding: 14, gap: 12,
