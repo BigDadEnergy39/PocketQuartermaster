@@ -260,12 +260,20 @@ export default function EditContainer() {
           </TouchableOpacity>
         </>
       ) : (
-        <TouchableOpacity
-          style={styles.linkInfoBtn}
-          onPress={() => router.push(`/container/link?source_id=${id}`)}
-        >
-          <Text style={styles.linkInfoBtnText}>🔗 Link to Existing Container…</Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            style={styles.linkInfoBtn}
+            onPress={() => router.push(`/container/link?source_id=${id}`)}
+          >
+            <Text style={styles.linkInfoBtnText}>🔗 Link to Existing Container…</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.linkInfoBtn}
+            onPress={() => router.push(`/container/join-group?container_id=${id}`)}
+          >
+            <Text style={styles.linkInfoBtnText}>🔗 Join a Linked Set…</Text>
+          </TouchableOpacity>
+        </>
       )}
 
       <TouchableOpacity
