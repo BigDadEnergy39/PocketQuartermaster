@@ -147,6 +147,7 @@ export default function ContainerDetail() {
   const insets = useSafeAreaInsets();
   const [groupByCategory, setGroupByCategory] = useState(false);
   const [containerName, setContainerName] = useState('Container');
+  const [linkedGroupName, setLinkedGroupName] = useState<string | null>(null);
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
 
   const accent = currentUnit?.accent_color ?? '#2d5a27';
@@ -163,8 +164,14 @@ export default function ContainerDetail() {
 
   useEffect(() => {
     if (!id) return;
-    supabase.from('containers').select('name').eq('id', id).single()
-      .then(({ data }) => { if (data) setContainerName(data.name); });
+    supabase.from('containers').select('name, group_id').eq('id', id).single()
+      .then(({ data }) => {
+        if (!data) return;
+        setContainerName(data.name);
+        if (!data.group_id) { setLinkedGroupName(null); return; }
+        supabase.from('container_groups').select('name').eq('id', data.group_id).single()
+          .then(({ data: g }) => setLinkedGroupName(g?.name ?? null));
+      });
   }, [id]);
 
   useEffect(() => {
@@ -263,6 +270,14 @@ export default function ContainerDetail() {
 
   return (
     <View style={styles.container}>
+      {linkedGroupName && (
+        <TouchableOpacity
+          style={styles.linkedBanner}
+          onPress={() => router.push(`/container/edit?id=${id}`)}
+        >
+          <Text style={styles.linkedBannerText}>🔗 Linked: {linkedGroupName}</Text>
+        </TouchableOpacity>
+      )}
       {groupByCategory && hasCategories ? (
         <SectionList
           sections={sections}
@@ -300,6 +315,8 @@ export default function ContainerDetail() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f0e8' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f0e8' },
+  linkedBanner: { paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#eef4fb' },
+  linkedBannerText: { fontSize: 13, fontWeight: '600', color: '#1a5276' },
   list: { padding: 16 },
   toggleBar: {
     flexDirection: 'row',

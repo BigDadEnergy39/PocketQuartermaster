@@ -8,6 +8,8 @@ export interface ContainerSummary {
   purpose: string;
   notes: string | null;
   item_count: number;
+  group_id: string | null;
+  group_name: string | null;
   subcontainer_count: number;
 }
 

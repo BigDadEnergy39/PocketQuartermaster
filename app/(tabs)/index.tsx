@@ -22,7 +22,10 @@ const TYPE_EMOJI: Record<string, string> = {
   other:       '📫',
 };
 
-interface Container { id: string; name: string; type: string; purpose: string; item_count: number; }
+interface Container {
+  id: string; name: string; type: string; purpose: string; item_count: number;
+  group_id: string | null; group_name: string | null;
+}
 
 export default function Inventory() {
   const { currentUnit } = useUnit();
@@ -89,9 +92,13 @@ export default function Inventory() {
               >
                 <Text style={styles.cardEmoji}>{emoji}</Text>
                 <View style={styles.cardBody}>
-                  <Text style={styles.cardName}>{item.name}</Text>
+                  <View style={styles.cardNameRow}>
+                    <Text style={styles.cardName}>{item.name}</Text>
+                    {item.group_id && <Text style={styles.linkedIcon}>🔗</Text>}
+                  </View>
                   <Text style={styles.cardMeta}>
                     {item.item_count} {item.item_count === 1 ? 'item' : 'items'}
+                    {item.group_name ? ` · Linked: ${item.group_name}` : ''}
                   </Text>
                 </View>
                 <View style={[styles.badge, { backgroundColor: purpose.color }]}>
@@ -138,6 +145,14 @@ export default function Inventory() {
                   <Text style={styles.sheetActionText}>Edit Container</Text>
                 </TouchableOpacity>
 
+                {menuContainer.group_id && (
+                  <TouchableOpacity style={styles.sheetAction} onPress={() => { closeMenu(); router.push(`/container/group?id=${menuContainer.group_id}`); }}>
+                    <Text style={styles.sheetActionIcon}>🔗</Text>
+                    <Text style={styles.sheetActionText}>Manage Linked Set</Text>
+                    <Text style={styles.sheetActionSub}>{menuContainer.group_name}</Text>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity style={styles.sheetCancel} onPress={closeMenu}>
                   <Text style={styles.sheetCancelText}>Cancel</Text>
                 </TouchableOpacity>
@@ -161,7 +176,9 @@ const styles = StyleSheet.create({
   },
   cardEmoji: { fontSize: 28 },
   cardBody: { flex: 1 },
+  cardNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   cardName: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
+  linkedIcon: { fontSize: 13 },
   cardMeta: { fontSize: 13, color: '#888', marginTop: 2 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
