@@ -7,7 +7,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
 import { useUnits } from '../../src/hooks/useUnits';
-import ColorPicker from '../../src/components/ColorPicker';
+import { ColorPicker } from '../../src/components/ColorPicker';
 import { useShoppingCategories, CategoryType } from '../../src/hooks/useShoppingCategories';
 
 interface Member { user_id: string; display_name: string; role: string; joined_at: string; }
@@ -392,7 +392,7 @@ export default function Settings() {
                 <Text style={styles.fieldLabel}>Unit Name</Text>
                 <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholderTextColor="#aaa" />
                 <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Unit Color</Text>
-                <ColorPicker value={editColor} onChange={setEditColor} />
+                <ColorPicker selected={editColor} onSelect={setEditColor} />
                 <View style={[styles.previewBanner, { backgroundColor: editColor }]}>
                   <Text style={styles.previewText}>{editName || 'Unit Name'}</Text>
                 </View>
