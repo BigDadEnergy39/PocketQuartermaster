@@ -66,3 +66,30 @@ migrations describe the schema that commit's code expects, so a fresh
 - Project/auth settings the repo can't express in SQL (e.g. `enable_signup = false`)
   belong in `supabase/config.toml`, also version-controlled.
 - CI (`scripts/check-rls.mjs`) blocks any migration that creates a table without RLS.
+
+# EAS Cloud Builds — Environment Variables
+
+EAS builds run on Expo's cloud servers, which **never see `.env.local`** (it's
+gitignored and stays on the dev machine). The Supabase URL and anon key are read
+at runtime from `EXPO_PUBLIC_*` env vars, so a cloud build with no EAS-registered
+values ships an app that crashes on launch with `Error: supabaseUrl is required.`
+This bit us: `eas build --platform android --profile preview` had *never*
+produced a working app until we registered them.
+
+Register them **once per EAS project** (they persist server-side, not per build):
+
+```sh
+eas env:create --name EXPO_PUBLIC_SUPABASE_URL --value <url> \
+  --environment production --visibility plaintext
+eas env:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <anon-key> \
+  --environment production --visibility plaintext
+```
+
+- `--visibility plaintext` is correct here: the URL and **anon** key are meant to
+  be public (the security model rests on RLS, not on keeping these secret — see
+  Database & Security Rules #1). This is *not* a contradiction of rule #5: only
+  the **`service_role`** key must never touch EAS env.
+- Verify before (re)adding — they should already be present:
+  `eas env:list production`.
+- Only public `EXPO_PUBLIC_*` values belong in plaintext EAS env. Any real secret
+  would need `--visibility secret` (and none currently do).
