@@ -9,6 +9,13 @@ import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
 import { ColorPicker } from '../../src/components/ColorPicker';
 import { useShoppingCategories, CategoryType } from '../../src/hooks/useShoppingCategories';
+import {
+  parseAndValidateProfile,
+  profileFilename,
+  summarizeProfile,
+  ContainerProfile,
+} from '../../src/lib/containerProfile';
+import { exportProfileFile, importProfileFile } from '../../src/lib/profileFile';
 
 interface Member { user_id: string; display_name: string; role: string; joined_at: string; }
 interface InviteCode { id: string; code: string; use_count: number; max_uses: number | null; expires_at: string | null; }
@@ -32,6 +39,10 @@ export default function Settings() {
   const [invites, setInvites] = useState<InviteCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+
+  // Container profile export/import (QM only)
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // Unit editing (QM only)
   const [editingUnit, setEditingUnit] = useState(false);
@@ -135,6 +146,79 @@ export default function Settings() {
         },
       },
     ]);
+  }
+
+  async function exportProfile() {
+    if (!currentUnit) return;
+    setExporting(true);
+    const { data, error } = await supabase.rpc('export_container_profile', { p_unit_id: currentUnit.id });
+    if (error) { setExporting(false); showAlert('Export failed', error.message); return; }
+
+    const profile = data as ContainerProfile;
+    if (!profile?.containers?.length) {
+      setExporting(false);
+      showAlert('Nothing to export', 'This unit has no containers yet. Add some first, then export.');
+      return;
+    }
+
+    const json = JSON.stringify(profile, null, 2);
+    try {
+      const outcome = await exportProfileFile(json, profileFilename(currentUnit.name));
+      setExporting(false);
+      // 'shared' → the OS share sheet already gave the user feedback; stay quiet.
+      if (outcome === 'downloaded') showAlert('Exported', 'Your container profile was downloaded.');
+      else if (outcome === 'copied') showAlert('Copied', 'Your container profile JSON was copied to the clipboard.');
+      else if (outcome === 'unavailable') showAlert('Export unavailable', "Sharing isn't available on this device.");
+    } catch (e: any) {
+      setExporting(false);
+      showAlert('Export failed', e?.message ?? 'Could not export the profile.');
+    }
+  }
+
+  async function importProfile() {
+    if (!currentUnit) return;
+    setImporting(true);
+    let text: string | null;
+    try {
+      text = await importProfileFile();
+    } catch (e: any) {
+      setImporting(false);
+      showAlert('Import failed', e?.message ?? 'Could not read that file.');
+      return;
+    }
+    setImporting(false);
+    if (text == null) return; // user cancelled the picker
+
+    const parsed = parseAndValidateProfile(text);
+    if (!parsed.ok) { showAlert('Invalid file', parsed.error); return; }
+
+    const from = parsed.profile.sourceUnitName ? ` from "${parsed.profile.sourceUnitName}"` : '';
+    showAlert(
+      'Import container profile?',
+      `This adds ${summarizeProfile(parsed.profile)}${from} to "${currentUnit.name}". Existing containers and items are left untouched.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Import', onPress: () => runImport(parsed.profile) },
+      ],
+    );
+  }
+
+  async function runImport(profile: ContainerProfile) {
+    if (!currentUnit) return;
+    setImporting(true);
+    const { data, error } = await supabase.rpc('import_container_profile', {
+      p_unit_id: currentUnit.id,
+      p_profile: profile,
+    });
+    setImporting(false);
+    if (error) { showAlert('Import failed', error.message); return; }
+    const r = (data ?? {}) as { containers?: number; items?: number };
+    const c = r.containers ?? 0;
+    const it = r.items ?? 0;
+    showAlert(
+      'Imported',
+      `Added ${c} container${c === 1 ? '' : 's'} and ${it} item${it === 1 ? '' : 's'}. Open the Containers tab to see them.`,
+    );
   }
 
   function changeRole(member: Member, newRole: string) {
@@ -375,6 +459,38 @@ export default function Settings() {
             >
               <Text style={[styles.generateBtnText, { color: accent }]}>
                 {generating ? 'Generating…' : '+ Generate Invite Code'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {/* Container profile export/import (QMs only) */}
+      {isQM && (
+        <>
+          <Text style={styles.sectionHeader}>Container Profile</Text>
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>
+              Export this unit's container setup — containers, subcontainers, linked sets,
+              and expected quantities (no live counts) — as a file to share with another
+              unit or keep as a backup. Import a profile to add that structure here.
+            </Text>
+            <TouchableOpacity
+              style={[styles.generateBtn, { borderColor: accent }, exporting && styles.disabled]}
+              onPress={exportProfile}
+              disabled={exporting || importing}
+            >
+              <Text style={[styles.generateBtnText, { color: accent }]}>
+                {exporting ? 'Exporting…' : '↑ Export Container Profile'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.generateBtn, { borderColor: accent, marginTop: 8 }, importing && styles.disabled]}
+              onPress={importProfile}
+              disabled={exporting || importing}
+            >
+              <Text style={[styles.generateBtnText, { color: accent }]}>
+                {importing ? 'Importing…' : '↓ Import Container Profile'}
               </Text>
             </TouchableOpacity>
           </View>
