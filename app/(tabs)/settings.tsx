@@ -15,7 +15,8 @@ import {
   summarizeProfile,
   ContainerProfile,
 } from '../../src/lib/containerProfile';
-import { exportProfileFile, importProfileFile } from '../../src/lib/profileFile';
+import { shareProfileFile, saveProfileFile, importProfileFile } from '../../src/lib/profileFile';
+import type { ExportOutcome } from '../../src/lib/profileFile';
 
 interface Member { user_id: string; display_name: string; role: string; joined_at: string; }
 interface InviteCode { id: string; code: string; use_count: number; max_uses: number | null; expires_at: string | null; }
@@ -162,11 +163,36 @@ export default function Settings() {
     }
 
     const json = JSON.stringify(profile, null, 2);
+    const filename = profileFilename(currentUnit.name);
+    setExporting(false);
+
+    // On web there's no share sheet or SAF — a browser download already saves to
+    // the device, so skip the chooser. On native, let the user pick how to hand
+    // the file off: send it to another unit, or save a backup onto this device.
+    if (Platform.OS === 'web') {
+      runExport(() => saveProfileFile(json, filename));
+      return;
+    }
+    showAlert(
+      'Export Container Profile',
+      'Share it with another unit, or save a backup file to this device?',
+      [
+        { text: 'Share…', onPress: () => runExport(() => shareProfileFile(json, filename)) },
+        { text: 'Save to Device…', onPress: () => runExport(() => saveProfileFile(json, filename)) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }
+
+  async function runExport(fn: () => Promise<ExportOutcome>) {
+    setExporting(true);
     try {
-      const outcome = await exportProfileFile(json, profileFilename(currentUnit.name));
+      const outcome = await fn();
       setExporting(false);
-      // 'shared' → the OS share sheet already gave the user feedback; stay quiet.
-      if (outcome === 'downloaded') showAlert('Exported', 'Your container profile was downloaded.');
+      // 'shared' → the OS share sheet already gave feedback; 'cancelled' → the
+      // user backed out of the save dialog. Both stay quiet.
+      if (outcome === 'saved') showAlert('Saved', 'Your container profile was saved to the folder you chose.');
+      else if (outcome === 'downloaded') showAlert('Exported', 'Your container profile was downloaded.');
       else if (outcome === 'copied') showAlert('Copied', 'Your container profile JSON was copied to the clipboard.');
       else if (outcome === 'unavailable') showAlert('Export unavailable', "Sharing isn't available on this device.");
     } catch (e: any) {

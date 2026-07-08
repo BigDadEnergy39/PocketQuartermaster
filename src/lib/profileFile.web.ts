@@ -2,10 +2,10 @@ import type { ExportOutcome } from './profileFile';
 
 // Web file I/O for container profiles. Uses plain browser APIs — no
 // expo-file-system/sharing/document-picker in the web bundle (Metro resolves
-// this .web file instead of .native). Share.share() no-ops on desktop browsers,
-// so the web path is download-first with a clipboard fallback.
-
-export async function exportProfileFile(json: string, filename: string): Promise<ExportOutcome> {
+// this .web file instead of .native). On web there's no share sheet or SAF, so
+// both "share" and "save to device" collapse to the same browser download (with
+// a clipboard fallback). Share.share() no-ops on desktop browsers anyway.
+async function downloadOrCopy(json: string, filename: string): Promise<ExportOutcome> {
   try {
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -26,6 +26,14 @@ export async function exportProfileFile(json: string, filename: string): Promise
       return 'unavailable';
     }
   }
+}
+
+export async function shareProfileFile(json: string, filename: string): Promise<ExportOutcome> {
+  return downloadOrCopy(json, filename);
+}
+
+export async function saveProfileFile(json: string, filename: string): Promise<ExportOutcome> {
+  return downloadOrCopy(json, filename);
 }
 
 export async function importProfileFile(): Promise<string | null> {
