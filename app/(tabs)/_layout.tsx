@@ -1,9 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Tabs, router } from 'expo-router';
 import { useUnit } from '../../src/context/UnitContext';
-import { useUnits } from '../../src/hooks/useUnits';
-import { supabase } from '../../src/lib/supabase';
 
 function UnitHeader() {
   const { currentUnit } = useUnit();
@@ -19,13 +17,7 @@ function UnitHeader() {
 }
 
 export default function TabLayout() {
-  const { currentUnit, setCurrentUnit, restoredUnitId, isRestored } = useUnit();
-  const [userId, setUserId] = useState<string | undefined>();
-  const { units } = useUnits(userId);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => setUserId(user?.id));
-  }, []);
+  const { currentUnit, setCurrentUnit, restoredUnitId, isRestored, units } = useUnit();
 
   useEffect(() => {
     if (units.length === 0 || !isRestored) return;

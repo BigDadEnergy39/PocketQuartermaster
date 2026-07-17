@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Share, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Share, ActivityIndicator, Platform,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { showAlert } from '../../src/lib/alert';
 import { useFocusEffect, router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useUnit } from '../../src/context/UnitContext';
-import { useUnits } from '../../src/hooks/useUnits';
 import { ColorPicker } from '../../src/components/ColorPicker';
 import { useShoppingCategories, CategoryType } from '../../src/hooks/useShoppingCategories';
 
@@ -25,9 +25,8 @@ const ROLE_OPTIONS = [
 ] as const;
 
 export default function Settings() {
-  const { currentUnit, setCurrentUnit } = useUnit();
+  const { currentUnit, setCurrentUnit, units, refetchUnits } = useUnit();
   const [userId, setUserId] = useState<string | undefined>();
-  const { units, refetch: refetchUnits } = useUnits(userId);
 
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<InviteCode[]>([]);
@@ -114,9 +113,16 @@ export default function Settings() {
   }
 
   async function shareCode(code: string) {
-    await Share.share({
-      message: `Join ${currentUnit?.name} on PocketQuartermaster!\n\nInvite code: ${code}\n\nDownload the app and use "Join with Invite Code" to get started.`,
-    });
+    const message = `Join ${currentUnit?.name} on PocketQuartermaster!\n\nInvite code: ${code}\n\nDownload the app and use "Join with Invite Code" to get started.`;
+    // Desktop browsers have no native share sheet — React Native's Share.share
+    // silently no-ops there — so on web fall back to copying the invite message
+    // to the clipboard. Native keeps the real share sheet.
+    if (Platform.OS === 'web') {
+      await Clipboard.setStringAsync(message);
+      showAlert('Copied!', 'Invite message copied to your clipboard — paste it to share.');
+      return;
+    }
+    await Share.share({ message });
   }
 
   async function deactivateCode(invite: InviteCode) {

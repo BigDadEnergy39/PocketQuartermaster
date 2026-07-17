@@ -3,9 +3,11 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 
 import { showAlert } from '../src/lib/alert';
 import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
+import { useUnit } from '../src/context/UnitContext';
 import { ColorPicker, UNIT_COLORS } from '../src/components/ColorPicker';
 
 export default function CreateUnit() {
+  const { refetchUnits } = useUnit();
   const [name, setName] = useState('');
   const [color, setColor] = useState(UNIT_COLORS[0]);
   const [loading, setLoading] = useState(false);
@@ -27,6 +29,10 @@ export default function CreateUnit() {
       setLoading(false);
       return;
     }
+
+    // Refresh the shared units list BEFORE navigating so the routing guard sees
+    // the new unit and keeps us in /(tabs) rather than bouncing to /onboarding.
+    await refetchUnits();
 
     setLoading(false);
     router.replace('/(tabs)');
