@@ -205,6 +205,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 24,
   },
   addAllText: { color: '#e67e22', fontSize: 15, fontWeight: '700' },
+  disabled: { opacity: 0.6 },
   sectionHeader: { fontSize: 13, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
   lineRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
