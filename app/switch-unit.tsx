@@ -1,19 +1,10 @@
-import { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
 import { router } from 'expo-router';
-import { supabase } from '../src/lib/supabase';
 import { useUnit } from '../src/context/UnitContext';
-import { useUnits } from '../src/hooks/useUnits';
 import { UnitWithRole } from '../src/types';
 
 export default function SwitchUnit() {
-  const { currentUnit, setCurrentUnit } = useUnit();
-  const [userId, setUserId] = useState<string | undefined>();
-  const { units } = useUnits(userId);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => setUserId(user?.id));
-  }, []);
+  const { currentUnit, setCurrentUnit, units } = useUnit();
 
   function selectUnit(unit: UnitWithRole) {
     setCurrentUnit(unit);

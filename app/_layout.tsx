@@ -3,11 +3,12 @@ import { Stack, router } from 'expo-router';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../src/lib/supabase';
 import { UnitProvider, useUnit } from '../src/context/UnitContext';
-import { useUnits } from '../src/hooks/useUnits';
 
 function RootNavigator({ session }: { session: Session | null }) {
-  const { units, loading } = useUnits(session?.user?.id);
-  const { setCurrentUnit } = useUnit();
+  // Units come from the shared UnitContext (the provider fetches them keyed on
+  // userId), so a join/create that calls refetchUnits updates the very list this
+  // guard reads — no stale [] bouncing the user back to /onboarding.
+  const { units, unitsLoading, setCurrentUnit } = useUnit();
   const prevUserId = useRef(session?.user?.id);
 
   // When the signed-in user changes (sign out / switch account), drop the
@@ -22,7 +23,7 @@ function RootNavigator({ session }: { session: Session | null }) {
   }, [session?.user?.id]);
 
   useEffect(() => {
-    if (loading) return;
+    if (unitsLoading) return;
     if (!session) {
       router.replace('/(auth)');
     } else if (units.length === 0) {
@@ -30,7 +31,7 @@ function RootNavigator({ session }: { session: Session | null }) {
     } else {
       router.replace('/(tabs)');
     }
-  }, [session, units, loading]);
+  }, [session, units, unitsLoading]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -76,7 +77,7 @@ export default function RootLayout() {
   if (!initialized) return null;
 
   return (
-    <UnitProvider>
+    <UnitProvider userId={session?.user?.id}>
       <RootNavigator session={session} />
     </UnitProvider>
   );

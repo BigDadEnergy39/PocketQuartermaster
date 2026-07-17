@@ -3,8 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { showAlert } from '../src/lib/alert';
 import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
+import { useUnit } from '../src/context/UnitContext';
 
 export default function JoinUnit() {
+  const { refetchUnits } = useUnit();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -25,6 +27,11 @@ export default function JoinUnit() {
       showAlert('Could not join', data?.error ?? error?.message);
       return;
     }
+
+    // Refresh the shared units list BEFORE navigating so the routing guard in
+    // app/_layout.tsx sees the newly-joined unit (units.length > 0) and lets us
+    // into /(tabs) instead of bouncing back to /onboarding on a stale [].
+    await refetchUnits();
 
     showAlert('Welcome!', `You've joined ${data.unit_name}.`, [
       { text: 'Let\'s go', onPress: () => router.replace('/(tabs)') },
