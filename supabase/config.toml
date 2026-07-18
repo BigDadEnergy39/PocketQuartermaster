@@ -159,8 +159,17 @@ enabled = true
 site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
-# A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# A list of URLs that auth providers are permitted to redirect to post authentication.
+# Password-reset recovery links redirect back to /reset-password on whichever
+# origin sent them, so every origin that can host the web app must be listed
+# (the `/**` wildcard allows any path under it). These apply to the LOCAL stack;
+# the cloud project keeps its own list under Auth > URL Configuration.
+additional_redirect_urls = [
+  "https://127.0.0.1:3000",
+  "http://localhost:8081/**",
+  "http://localhost:19006/**",
+  "https://pocket-quartermaster.expo.app/**",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -233,15 +242,29 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
+# Use a production-ready SMTP server.
+#
+# LOCAL dev intentionally leaves this OFF: `supabase start` runs Inbucket, a mail
+# catcher that captures every outgoing email (view them at http://127.0.0.1:54324)
+# so password-reset testing never sends real mail. Enabling SMTP here would route
+# LOCAL testing through the real provider too — not what we want.
+#
+# PRODUCTION uses Resend. Configure it in the cloud project (Supabase dashboard →
+# Auth → SMTP Settings), OR uncomment the block below if you push config.toml to
+# the cloud. The password (an API key) is a secret — never commit it; supply it
+# via env() from a gitignored .env or your shell.
+#   host   = smtp.resend.com   (port 465 SSL, or 587 STARTTLS)
+#   user   = resend
+#   pass   = your Resend API key
+#   admin_email / sender_name = a From address on a domain you've verified in Resend
 # [auth.email.smtp]
 # enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# host = "smtp.resend.com"
+# port = 465
+# user = "resend"
+# pass = "env(RESEND_API_KEY)"
+# admin_email = "no-reply@yourverifieddomain.com"
+# sender_name = "PocketQuartermaster"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
