@@ -1,10 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../src/lib/supabase';
 import { UnitProvider, useUnit } from '../src/context/UnitContext';
 
-function RootNavigator({ session }: { session: Session | null }) {
+// A password-reset link lands on the web app with `type=recovery` in the URL
+// hash. Detecting it here (before any auth event fires) lets us hold the user on
+// the reset screen from the very first render, so the recovery session the link
+// creates is never mistaken for a normal sign-in and routed into the app.
+const isRecoveryUrl =
+  Platform.OS === 'web' &&
+  typeof window !== 'undefined' &&
+  window.location.hash.includes('type=recovery');
+
+function RootNavigator({
+  session,
+  recovering,
+}: {
+  session: Session | null;
+  recovering: boolean;
+}) {
   // Units come from the shared UnitContext (the provider fetches them keyed on
   // userId), so a join/create that calls refetchUnits updates the very list this
   // guard reads — no stale [] bouncing the user back to /onboarding.
@@ -23,6 +39,14 @@ function RootNavigator({ session }: { session: Session | null }) {
   }, [session?.user?.id]);
 
   useEffect(() => {
+    // While recovering from a reset link, hold on the reset screen regardless of
+    // session/units — the session that link created must not be treated as a
+    // normal login. This check comes first, before the unitsLoading gate, so we
+    // never flash the app while units load for the recovery user.
+    if (recovering) {
+      router.replace('/reset-password');
+      return;
+    }
     if (unitsLoading) return;
     if (!session) {
       router.replace('/(auth)');
@@ -31,13 +55,15 @@ function RootNavigator({ session }: { session: Session | null }) {
     } else {
       router.replace('/(tabs)');
     }
-  }, [session, units, unitsLoading]);
+  }, [session, units, unitsLoading, recovering]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="onboarding" />
+      <Stack.Screen name="forgot-password" />
+      <Stack.Screen name="reset-password" />
       <Stack.Screen name="create-unit" />
       <Stack.Screen name="join-unit" />
       <Stack.Screen name="switch-unit" />
@@ -60,6 +86,7 @@ function RootNavigator({ session }: { session: Session | null }) {
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [recovering, setRecovering] = useState(isRecoveryUrl);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -67,7 +94,12 @@ export default function RootLayout() {
       setInitialized(true);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // A recovery link both establishes a session AND fires PASSWORD_RECOVERY.
+      // Latch "recovering" so RootNavigator pins the user to the reset screen;
+      // clear it on sign-out (which happens right after they set a new password).
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
+      if (event === 'SIGNED_OUT') setRecovering(false);
       setSession(session);
     });
 
@@ -78,7 +110,7 @@ export default function RootLayout() {
 
   return (
     <UnitProvider userId={session?.user?.id}>
-      <RootNavigator session={session} />
+      <RootNavigator session={session} recovering={recovering} />
     </UnitProvider>
   );
 }

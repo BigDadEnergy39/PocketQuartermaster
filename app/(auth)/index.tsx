@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 
 // Accounts are invite-only. There is no in-app sign-up — new users are
@@ -56,6 +57,10 @@ export default function SignIn() {
         <Text style={styles.buttonText}>{loading ? 'Loading…' : 'Sign In'}</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity onPress={() => router.push('/forgot-password')}>
+        <Text style={styles.forgot}>Forgot password?</Text>
+      </TouchableOpacity>
+
       <Text style={styles.inviteNote}>
         PocketQuartermaster is invite-only. Contact your unit administrator to get an account.
       </Text>
@@ -85,5 +90,6 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   error: { color: '#c0392b', textAlign: 'center', marginBottom: 12, fontSize: 14 },
+  forgot: { textAlign: 'center', color: '#2d5a27', fontSize: 14, marginBottom: 16 },
   inviteNote: { textAlign: 'center', color: '#888', fontSize: 13, marginTop: 8 },
 });
