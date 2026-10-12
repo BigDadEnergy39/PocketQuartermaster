@@ -1,0 +1,19 @@
+{
+  "name": "pocketquartermaster-keepwarm",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Cron Worker that keeps the Supabase Free-plan project from pausing during quiet stretches.",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260903.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.128.0"
+  }
+}

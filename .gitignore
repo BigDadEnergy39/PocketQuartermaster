@@ -46,3 +46,8 @@ yarn-error.*
 
 # Claude Code local dev config (machine-specific, per-session)
 .claude/launch.json
+
+# Wrangler (keepwarm/): local secrets file for `wrangler dev`, and its build cache
+.dev.vars
+!.dev.vars.example
+.wrangler/

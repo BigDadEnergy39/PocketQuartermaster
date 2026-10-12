@@ -1,0 +1,19 @@
+# Local development values for `npm run dev`.
+#
+# Copy to `.dev.vars` (gitignored) and fill in. These mirror the three secrets
+# you set on the deployed Worker with `wrangler secret put` — see README.md.
+#
+# `.dev.vars` is wrangler's equivalent of `.env.local`: it is read only by
+# `wrangler dev` and never uploaded to Cloudflare.
+
+# Your Supabase project's API URL.
+SUPABASE_URL=https://your-project-ref.supabase.co
+
+# The publishable/anon key — the same one the browser bundle already ships.
+# NEVER put the service_role / secret key here: this Worker only needs to make
+# one anon-callable RPC (is_unit_member), which reveals nothing.
+SUPABASE_ANON_KEY=sb_publishable_xxxxxxxxxxxxxxxxxxxxxx
+
+# Optional. Your healthchecks.io ping URL. Leave blank to run without a
+# dead-man's switch — the ping still works, you just don't get told if it dies.
+HEALTHCHECK_URL=
